@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Ok;
-use winit::window::Window;
+use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 pub struct Surface {
     handle: wgpu::Surface<'static>,
@@ -34,7 +34,7 @@ impl State {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: true,
+                force_fallback_adapter: false,
                 compatible_surface: Some(&surface),
             })
             .await?;
@@ -51,6 +51,8 @@ impl State {
             .await?;
 
         let window_size = window.inner_size();
+        assert!(window_size.width > 0);
+        assert!(window_size.height > 0);
 
         let surface_capabilities = surface.get_capabilities(&adapter);
         let surface_format = surface_capabilities
@@ -82,11 +84,100 @@ impl State {
         })
     }
 
-    pub fn resize(&mut self, _width: u32, _height: u32) {
-        todo!()
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            let surface = &mut self.surface;
+
+            surface.config.width = width;
+            surface.config.height = height;
+            surface.handle.configure(&self.device, &surface.config);
+
+            surface.is_configured = true;
+        }
     }
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self) -> anyhow::Result<()> {
         self.window.request_redraw();
+
+        if !self.surface.is_configured {
+            return Ok(());
+        }
+
+        let output = match self.surface.handle.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
+                self.surface
+                    .handle
+                    .configure(&self.device, &self.surface.config);
+                surface_texture
+            }
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded
+            | wgpu::CurrentSurfaceTexture::Validation => {
+                return Ok(()); // Skip this frame
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface
+                    .handle
+                    .configure(&self.device, &self.surface.config);
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                // We would have to recreate the devices and all resources created,
+                // but we'll just bail now
+                anyhow::bail!("Lost device");
+            }
+        };
+
+        let surface_view = output.texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("surface-view"),
+            ..Default::default()
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("render-encoder"),
+            });
+
+        {
+            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("render-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &surface_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
+    }
+
+    pub fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+        match (code, is_pressed) {
+            (KeyCode::Escape, true) => event_loop.exit(),
+            _ => {}
+        }
+    }
+
+    fn update(&mut self) {
+        todo!();
     }
 }
