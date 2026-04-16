@@ -10,10 +10,7 @@ use winit::{
     window::Window,
 };
 #[cfg(target_arch = "wasm32")]
-use winit::{
-    event_loop::{EventLoop, EventLoopProxy},
-    platform::web::EventLoopExtWebSys,
-};
+use winit::{event_loop::EventLoopProxy, platform::web::EventLoopExtWebSys};
 
 use crate::state::State;
 

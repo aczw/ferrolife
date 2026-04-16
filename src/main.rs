@@ -1,6 +1,3 @@
-mod app;
-mod state;
-
 fn main() {
-    app::run().unwrap();
+    ferrolife::run().unwrap();
 }

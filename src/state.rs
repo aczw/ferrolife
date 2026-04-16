@@ -13,7 +13,7 @@ pub struct State {
     surface: Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    window: Arc<Window>,
+    pub(crate) window: Arc<Window>,
 }
 
 impl State {

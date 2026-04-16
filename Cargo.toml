@@ -17,12 +17,20 @@ winit = "0.30.13"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[target.wasm32.dependencies]
+[target.wasm32-unknown-unknown.dependencies]
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 wasm-bindgen = "0.2.118"
 wasm-bindgen-futures = "0.4.68"
 web-sys = { version = "0.3.95", features = ["Document", "Window", "Element"] }
+
+# See https://github.com/trunk-rs/trunk/issues/991#issuecomment-3139927457
+[package.metadata.wasm-pack.profile.profiling]
+wasm-opt = ['--enable-bulk-memory', '--enable-nontrapping-float-to-int']
+
+# See https://github.com/trunk-rs/trunk/issues/991#issuecomment-3139927457
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['--enable-bulk-memory', '--enable-nontrapping-float-to-int']
 
 [[bin]]
 name = "ferrolife"
