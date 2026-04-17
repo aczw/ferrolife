@@ -8,7 +8,7 @@ use crate::vertex::Vertex;
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [0.0, 0.5, 0.0],
+        position: [-0.5, 0.5, 0.0],
         color: [1.0, 0.0, 0.0],
     },
     Vertex {
@@ -19,7 +19,13 @@ const VERTICES: &[Vertex] = &[
         position: [0.5, -0.5, 0.0],
         color: [0.0, 0.0, 1.0],
     },
+    Vertex {
+        position: [0.5, 0.5, 0.0],
+        color: [1.0, 1.0, 1.0],
+    },
 ];
+
+const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 pub struct Surface {
     handle: wgpu::Surface<'static>,
@@ -34,7 +40,8 @@ pub struct State {
     render_pipeline: wgpu::RenderPipeline,
 
     vertex_buf: wgpu::Buffer,
-    num_vertices: u32,
+    index_buf: wgpu::Buffer,
+    num_indices: u32,
 
     pub window: Arc<Window>,
 }
@@ -146,11 +153,17 @@ impl State {
             contents: bytemuck::cast_slice(VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
         });
+        let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("index-buf"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
         Ok(Self {
             render_pipeline,
             vertex_buf,
-            num_vertices: VERTICES.len() as u32,
+            index_buf,
+            num_indices: INDICES.len() as u32,
             window,
             surface: Surface {
                 handle: surface,
@@ -243,7 +256,8 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
-            render_pass.draw(0..self.num_vertices, 0..1);
+            render_pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
