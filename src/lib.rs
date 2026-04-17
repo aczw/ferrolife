@@ -1,5 +1,6 @@
 mod app;
 mod state;
+mod vertex;
 
 /// Makes `run()` reachable as `ferrolife::run()` respectively.
 pub use app::run;

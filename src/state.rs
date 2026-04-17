@@ -1,7 +1,25 @@
 use std::sync::Arc;
 
 use anyhow::Ok;
+use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
+
+use crate::vertex::Vertex;
+
+const VERTICES: &[Vertex] = &[
+    Vertex {
+        position: [0.0, 0.5, 0.0],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.0],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.0],
+        color: [0.0, 0.0, 1.0],
+    },
+];
 
 pub struct Surface {
     handle: wgpu::Surface<'static>,
@@ -15,7 +33,10 @@ pub struct State {
     queue: wgpu::Queue,
     render_pipeline: wgpu::RenderPipeline,
 
-    pub(crate) window: Arc<Window>,
+    vertex_buf: wgpu::Buffer,
+    num_vertices: u32,
+
+    pub window: Arc<Window>,
 }
 
 impl State {
@@ -89,7 +110,7 @@ impl State {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[],
+                buffers: &[Vertex::buf_layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -120,8 +141,16 @@ impl State {
             cache: None,
         });
 
+        let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vertex-buf"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         Ok(Self {
             render_pipeline,
+            vertex_buf,
+            num_vertices: VERTICES.len() as u32,
             window,
             surface: Surface {
                 handle: surface,
@@ -213,7 +242,8 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+            render_pass.draw(0..self.num_vertices, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
