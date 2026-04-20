@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Ok;
-use cgmath::Vector3;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
@@ -92,8 +91,6 @@ impl State {
             .await?;
 
         let window_size = window.inner_size();
-        assert!(window_size.width > 0);
-        assert!(window_size.height > 0);
 
         let surface_capabilities = surface.get_capabilities(&adapter);
         let surface_format = surface_capabilities
@@ -126,15 +123,7 @@ impl State {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let camera = Camera {
-            eye: (0.0, 0.0, 2.0).into(),
-            target: (0.0, 0.0, 0.0).into(),
-            up: Vector3::unit_y(),
-            right: 10.0,
-            top: 10.0,
-            near: 0.1,
-            far: 100.0,
-        };
+        let camera = Camera::new(10.0, window_size.width as f32 / window_size.height as f32);
         let mut camera_unif = camera::Uniform::new();
         camera_unif.update_view_proj(&camera);
         let camera_unif_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -234,12 +223,15 @@ impl State {
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             let surface = &mut self.surface;
-
             surface.config.width = width;
             surface.config.height = height;
             surface.handle.configure(&self.device, &surface.config);
-
             surface.is_configured = true;
+
+            self.camera
+                .update_aspect_ratio(width as f32 / height as f32);
+
+            self.update();
         }
     }
 
