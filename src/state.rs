@@ -1,26 +1,30 @@
 use std::sync::Arc;
 
 use anyhow::Ok;
+use cgmath::Vector3;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
-use crate::vertex::Vertex;
+use crate::{
+    camera::{self, Camera},
+    vertex::Vertex,
+};
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.5, 0.5, 0.0],
+        position: [-5.0, 5.0, 0.0],
         color: [1.0, 0.0, 0.0],
     },
     Vertex {
-        position: [-0.5, -0.5, 0.0],
+        position: [-5.0, -5.0, 0.0],
         color: [0.0, 1.0, 0.0],
     },
     Vertex {
-        position: [0.5, -0.5, 0.0],
+        position: [5.0, -5.0, 0.0],
         color: [0.0, 0.0, 1.0],
     },
     Vertex {
-        position: [0.5, 0.5, 0.0],
+        position: [5.0, 5.0, 0.0],
         color: [1.0, 1.0, 1.0],
     },
 ];
@@ -34,16 +38,22 @@ pub struct Surface {
 }
 
 pub struct State {
+    pub window: Arc<Window>,
+
     surface: Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    render_pipeline: wgpu::RenderPipeline,
 
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
     num_indices: u32,
 
-    pub window: Arc<Window>,
+    camera: Camera,
+    camera_unif: camera::Uniform,
+    camera_unif_buf: wgpu::Buffer,
+    camera_bg: wgpu::BindGroup,
+
+    render_pipeline: wgpu::RenderPipeline,
 }
 
 impl State {
@@ -104,10 +114,59 @@ impl State {
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
+        let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vertex-buf"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("index-buf"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let camera = Camera {
+            eye: (0.0, 0.0, 2.0).into(),
+            target: (0.0, 0.0, 0.0).into(),
+            up: Vector3::unit_y(),
+            right: 10.0,
+            top: 10.0,
+            near: 0.1,
+            far: 100.0,
+        };
+        let mut camera_unif = camera::Uniform::new();
+        camera_unif.update_view_proj(&camera);
+        let camera_unif_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("camera-unif-buf"),
+            contents: bytemuck::cast_slice(&[camera_unif]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let camera_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("camera-bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let camera_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("camera-bg"),
+            layout: &camera_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_unif_buf.as_entire_binding(),
+            }],
+        });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render-pipeline-layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[Some(&camera_bgl)],
                 immediate_size: 0,
             });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -148,17 +207,6 @@ impl State {
             cache: None,
         });
 
-        let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex-buf"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("index-buf"),
-            contents: bytemuck::cast_slice(INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
         Ok(Self {
             render_pipeline,
             vertex_buf,
@@ -172,6 +220,10 @@ impl State {
             },
             device,
             queue,
+            camera,
+            camera_unif,
+            camera_unif_buf,
+            camera_bg,
         })
     }
 
@@ -255,8 +307,11 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.camera_bg, &[]);
+
             render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
             render_pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
+
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
