@@ -52,6 +52,7 @@ pub struct State {
     camera_unif: camera::Uniform,
     camera_unif_buf: wgpu::Buffer,
     camera_bg: wgpu::BindGroup,
+    camera_controller: camera::Controller,
 
     render_pipeline: wgpu::RenderPipeline,
 }
@@ -163,6 +164,8 @@ impl State {
             }],
         });
 
+        let camera_controller = camera::Controller::new(0.2);
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render-pipeline-layout"),
@@ -224,6 +227,7 @@ impl State {
             camera_unif,
             camera_unif_buf,
             camera_bg,
+            camera_controller,
         })
     }
 
@@ -321,14 +325,22 @@ impl State {
         Ok(())
     }
 
-    pub fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
-        match (code, is_pressed) {
-            (KeyCode::Escape, true) => event_loop.exit(),
-            _ => {}
+    pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+        if code == KeyCode::Escape && is_pressed {
+            event_loop.exit();
+        } else {
+            self.camera_controller.handle_key(code, is_pressed);
+            self.update();
         }
     }
 
-    fn update(&mut self) {
-        todo!();
+    pub fn update(&mut self) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_unif.update_view_proj(&self.camera);
+        self.queue.write_buffer(
+            &self.camera_unif_buf,
+            0,
+            bytemuck::cast_slice(&[self.camera_unif]),
+        );
     }
 }
