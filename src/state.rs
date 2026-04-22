@@ -190,7 +190,7 @@ impl State {
             }],
         });
 
-        let camera_controller = camera::Controller::new(0.2);
+        let camera_controller = camera::Controller::new(0.2, 0.05);
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -360,8 +360,7 @@ impl State {
     pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         if code == KeyCode::Escape && is_pressed {
             event_loop.exit();
-        } else {
-            self.camera_controller.handle_key(code, is_pressed);
+        } else if self.camera_controller.handle_key(code, is_pressed) {
             self.update();
         }
     }

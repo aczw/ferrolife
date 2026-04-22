@@ -26,11 +26,14 @@ pub struct Uniform {
 }
 
 pub struct Controller {
-    speed: f32,
+    pan_speed: f32,
+    zoom_speed: f32,
     is_up_pressed: bool,
     is_down_pressed: bool,
     is_left_pressed: bool,
     is_right_pressed: bool,
+    is_zoom_in_pressed: bool,
+    is_zoom_out_pressed: bool,
 }
 
 impl Camera {
@@ -76,13 +79,16 @@ impl Uniform {
 }
 
 impl Controller {
-    pub fn new(speed: f32) -> Self {
+    pub fn new(pan_speed: f32, zoom_speed: f32) -> Self {
         Self {
-            speed,
+            pan_speed,
+            zoom_speed,
             is_up_pressed: false,
             is_down_pressed: false,
             is_left_pressed: false,
             is_right_pressed: false,
+            is_zoom_in_pressed: false,
+            is_zoom_out_pressed: false,
         }
     }
 
@@ -104,6 +110,16 @@ impl Controller {
                 self.is_right_pressed = is_pressed;
                 true
             }
+
+            KeyCode::KeyE => {
+                self.is_zoom_in_pressed = is_pressed;
+                true
+            }
+            KeyCode::KeyQ => {
+                self.is_zoom_out_pressed = is_pressed;
+                true
+            }
+
             _ => false,
         }
     }
@@ -112,19 +128,26 @@ impl Controller {
         let mut direction = Vector3::new(0.0, 0.0, 0.0);
 
         if self.is_up_pressed {
-            direction += Vector3::new(0.0, self.speed, 0.0);
+            direction += Vector3::new(0.0, self.pan_speed, 0.0);
         }
         if self.is_down_pressed {
-            direction += Vector3::new(0.0, -self.speed, 0.0);
+            direction += Vector3::new(0.0, -self.pan_speed, 0.0);
         }
         if self.is_left_pressed {
-            direction += Vector3::new(-self.speed, 0.0, 0.0);
+            direction += Vector3::new(-self.pan_speed, 0.0, 0.0);
         }
         if self.is_right_pressed {
-            direction += Vector3::new(self.speed, 0.0, 0.0);
+            direction += Vector3::new(self.pan_speed, 0.0, 0.0);
         }
 
         camera.eye += direction;
         camera.target += direction;
+
+        if self.is_zoom_in_pressed {
+            camera.top *= 1.0 - self.zoom_speed;
+        }
+        if self.is_zoom_out_pressed {
+            camera.top *= 1.0 + self.zoom_speed;
+        }
     }
 }
