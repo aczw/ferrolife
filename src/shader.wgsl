@@ -4,15 +4,14 @@ struct CameraUniform {
 
 struct VertexInput {
     @location(0) position: vec3f,
-    @location(1) color: vec3f,
 }
 
 struct InstanceInput {
-    @location(2) model_mat_0: vec4f,
-    @location(3) model_mat_1: vec4f,
-    @location(4) model_mat_2: vec4f,
-    @location(5) model_mat_3: vec4f,
-    @location(6) color: vec3f,
+    @location(1) model_mat_0: vec4f,
+    @location(2) model_mat_1: vec4f,
+    @location(3) model_mat_2: vec4f,
+    @location(4) model_mat_3: vec4f,
+    @location(5) color: vec3f,
 }
 
 struct VertexOutput {

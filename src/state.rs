@@ -7,30 +7,34 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 use crate::{
     camera::{self, Camera},
-    instance::{INSTANCE_DISPLACEMENT, Instance, InstanceRaw, NUM_INSTANCES_PER_ROW},
+    instance::{Instance, InstanceRaw},
     vertex::Vertex,
 };
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-5.0, 5.0, 0.0],
-        color: [1.0, 0.0, 0.0],
+        position: [-0.5, 0.5, 0.0],
     },
     Vertex {
-        position: [-5.0, -5.0, 0.0],
-        color: [0.0, 1.0, 0.0],
+        position: [-0.5, -0.5, 0.0],
     },
     Vertex {
-        position: [5.0, -5.0, 0.0],
-        color: [0.0, 0.0, 1.0],
+        position: [0.5, -0.5, 0.0],
     },
     Vertex {
-        position: [5.0, 5.0, 0.0],
-        color: [1.0, 1.0, 1.0],
+        position: [0.5, 0.5, 0.0],
     },
 ];
 
 const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
+
+const NUM_INSTANCES_PER_ROW: u32 = 10;
+/// Recenters the instances at the world space origin.
+const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
+    (NUM_INSTANCES_PER_ROW - 1) as f32 * 0.5,
+    (NUM_INSTANCES_PER_ROW - 1) as f32 * 0.5,
+    0.0,
+);
 
 pub struct Surface {
     handle: wgpu::Surface<'static>,
@@ -134,18 +138,18 @@ impl State {
                     let y_flt = y as f32;
                     let upper_bound = (NUM_INSTANCES_PER_ROW - 1) as f32;
 
-                    let position = Vector3 {
+                    let translation = Vector3 {
                         x: x_flt,
                         y: y_flt,
                         z: 0.0,
                     } - INSTANCE_DISPLACEMENT;
                     let color = Vector3 {
-                        x: dbg!(x_flt / upper_bound),
-                        y: dbg!(y_flt / upper_bound),
+                        x: x_flt / upper_bound,
+                        y: y_flt / upper_bound,
                         z: 0.0,
                     };
 
-                    Instance { position, color }
+                    Instance { translation, color }
                 })
             })
             .collect::<Vec<_>>();

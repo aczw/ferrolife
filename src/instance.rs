@@ -1,14 +1,7 @@
 use cgmath::{Matrix4, Vector3};
 
-pub const NUM_INSTANCES_PER_ROW: u32 = 10;
-pub const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-    0.0,
-);
-
 pub struct Instance {
-    pub position: Vector3<f32>,
+    pub translation: Vector3<f32>,
     pub color: Vector3<f32>,
 }
 
@@ -22,7 +15,7 @@ pub struct InstanceRaw {
 impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
-            model: Matrix4::from_translation(self.position).into(),
+            model: Matrix4::from_translation(self.translation).into(),
             color: self.color.into(),
         }
     }
@@ -37,27 +30,27 @@ impl InstanceRaw {
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
                     offset: 0,
-                    shader_location: 2,
+                    shader_location: 1,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
                     offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 3,
+                    shader_location: 2,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
                     offset: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 4,
+                    shader_location: 3,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
                     offset: std::mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 5,
+                    shader_location: 4,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x3,
                     offset: std::mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
-                    shader_location: 6,
+                    shader_location: 5,
                 },
             ],
         }
