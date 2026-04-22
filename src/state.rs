@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use anyhow::Ok;
+use cgmath::Vector3;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 use crate::{
     camera::{self, Camera},
+    instance::{INSTANCE_DISPLACEMENT, Instance, InstanceRaw, NUM_INSTANCES_PER_ROW},
     vertex::Vertex,
 };
 
@@ -46,6 +48,8 @@ pub struct State {
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
     num_indices: u32,
+    instances: Vec<Instance>,
+    instance_buf: wgpu::Buffer,
 
     camera: Camera,
     camera_unif: camera::Uniform,
@@ -123,6 +127,35 @@ impl State {
             usage: wgpu::BufferUsages::INDEX,
         });
 
+        let instances = (0..NUM_INSTANCES_PER_ROW)
+            .flat_map(|y| {
+                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                    let x_flt = x as f32;
+                    let y_flt = y as f32;
+                    let upper_bound = (NUM_INSTANCES_PER_ROW - 1) as f32;
+
+                    let position = Vector3 {
+                        x: x_flt,
+                        y: y_flt,
+                        z: 0.0,
+                    } - INSTANCE_DISPLACEMENT;
+                    let color = Vector3 {
+                        x: dbg!(x_flt / upper_bound),
+                        y: dbg!(y_flt / upper_bound),
+                        z: 0.0,
+                    };
+
+                    Instance { position, color }
+                })
+            })
+            .collect::<Vec<_>>();
+        let instance_raw_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instance-buf"),
+            contents: bytemuck::cast_slice(&instance_raw_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         let camera = Camera::new(10.0, window_size.width as f32 / window_size.height as f32);
         let mut camera_unif = camera::Uniform::new();
         camera_unif.update_view_proj(&camera);
@@ -168,7 +201,7 @@ impl State {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Vertex::buf_layout()],
+                buffers: &[Vertex::buf_layout(), InstanceRaw::buf_layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -204,6 +237,8 @@ impl State {
             vertex_buf,
             index_buf,
             num_indices: INDICES.len() as u32,
+            instances,
+            instance_buf,
             window,
             surface: Surface {
                 handle: surface,
@@ -306,9 +341,10 @@ impl State {
             render_pass.set_bind_group(0, &self.camera_bg, &[]);
 
             render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buf.slice(..));
             render_pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
