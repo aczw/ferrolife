@@ -95,7 +95,7 @@ impl State {
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("device"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
+                required_limits: wgpu::Limits::downlevel_defaults(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
@@ -122,7 +122,7 @@ impl State {
             view_formats: vec![],
         };
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let cells_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/cells.wgsl"));
 
         let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex-buf"),
@@ -213,7 +213,7 @@ impl State {
             label: Some("render-pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &cells_shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[Vertex::buf_layout(), InstanceRaw::buf_layout()],
@@ -240,7 +240,7 @@ impl State {
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &cells_shader,
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
