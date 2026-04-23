@@ -29,11 +29,12 @@ const VERTICES: &[Vertex] = &[
 
 const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
-const NUM_INSTANCES_PER_ROW: u32 = 50;
+const GRID_WIDTH: u32 = 70;
+const GRID_HEIGHT: u32 = 50;
 /// Recenters the instances at the world space origin.
 const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
-    (NUM_INSTANCES_PER_ROW - 1) as f32 * 0.5,
-    (NUM_INSTANCES_PER_ROW - 1) as f32 * 0.5,
+    (GRID_WIDTH - 1) as f32 * 0.5,
+    (GRID_HEIGHT - 1) as f32 * 0.5,
     0.0,
 );
 
@@ -134,12 +135,13 @@ impl State {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let instances = (0..NUM_INSTANCES_PER_ROW)
+        let instances = (0..GRID_HEIGHT)
             .flat_map(|y| {
-                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                (0..GRID_WIDTH).map(move |x| {
                     let x_flt = x as f32;
+                    let x_upper_bound = (GRID_WIDTH - 1) as f32;
                     let y_flt = y as f32;
-                    let upper_bound = (NUM_INSTANCES_PER_ROW - 1) as f32;
+                    let y_upper_bound = (GRID_HEIGHT - 1) as f32;
 
                     let translation = Vector3 {
                         x: x_flt,
@@ -147,8 +149,8 @@ impl State {
                         z: 0.0,
                     } - INSTANCE_DISPLACEMENT;
                     let color = Vector3 {
-                        x: x_flt / upper_bound,
-                        y: y_flt / upper_bound,
+                        x: x_flt / x_upper_bound,
+                        y: y_flt / y_upper_bound,
                         z: 0.0,
                     };
 
