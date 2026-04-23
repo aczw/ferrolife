@@ -2,6 +2,7 @@ mod app;
 mod camera;
 mod instance;
 mod state;
+mod texture;
 mod vertex;
 
 /// Makes `run()` reachable as `ferrolife::run()` respectively.

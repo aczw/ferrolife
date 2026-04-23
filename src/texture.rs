@@ -1,0 +1,39 @@
+pub struct Texture {
+    pub view: wgpu::TextureView,
+    _handle: wgpu::Texture,
+}
+
+impl Texture {
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth16Unorm;
+    pub const DEPTH_TEXTURE_LABEL: &str = "depth-tex";
+
+    pub fn create_depth_texture(
+        device: &wgpu::Device,
+        surface_config: &wgpu::SurfaceConfiguration,
+        label: &str,
+    ) -> Self {
+        let size = wgpu::Extent3d {
+            width: surface_config.width.max(1),
+            height: surface_config.height.max(1),
+            depth_or_array_layers: 1,
+        };
+
+        let handle = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let view = handle.create_view(&wgpu::TextureViewDescriptor::default());
+
+        Self {
+            _handle: handle,
+            view,
+        }
+    }
+}

@@ -8,6 +8,7 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 use crate::{
     camera::{self, Camera},
     instance::{Instance, InstanceRaw},
+    texture,
     vertex::Vertex,
 };
 
@@ -28,7 +29,7 @@ const VERTICES: &[Vertex] = &[
 
 const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
+const NUM_INSTANCES_PER_ROW: u32 = 50;
 /// Recenters the instances at the world space origin.
 const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
     (NUM_INSTANCES_PER_ROW - 1) as f32 * 0.5,
@@ -60,6 +61,8 @@ pub struct State {
     camera_unif_buf: wgpu::Buffer,
     camera_bg: wgpu::BindGroup,
     camera_controller: camera::Controller,
+
+    depth_texture: texture::Texture,
 
     render_pipeline: wgpu::RenderPipeline,
 }
@@ -192,6 +195,12 @@ impl State {
 
         let camera_controller = camera::Controller::new(0.2, 0.05);
 
+        let depth_texture = texture::Texture::create_depth_texture(
+            &device,
+            &surface_config,
+            texture::Texture::DEPTH_TEXTURE_LABEL,
+        );
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render-pipeline-layout"),
@@ -216,7 +225,13 @@ impl State {
                 polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false,
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: texture::Texture::DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
@@ -237,7 +252,6 @@ impl State {
         });
 
         Ok(Self {
-            render_pipeline,
             vertex_buf,
             index_buf,
             num_indices: INDICES.len() as u32,
@@ -256,6 +270,8 @@ impl State {
             camera_unif_buf,
             camera_bg,
             camera_controller,
+            depth_texture,
+            render_pipeline,
         })
     }
 
@@ -267,6 +283,11 @@ impl State {
             surface.handle.configure(&self.device, &surface.config);
             surface.is_configured = true;
 
+            self.depth_texture = texture::Texture::create_depth_texture(
+                &self.device,
+                &self.surface.config,
+                texture::Texture::DEPTH_TEXTURE_LABEL,
+            );
             self.camera
                 .update_aspect_ratio(width as f32 / height as f32);
 
@@ -335,7 +356,14 @@ impl State {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
