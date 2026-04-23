@@ -8,6 +8,7 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 use crate::{
     camera::{self, Camera},
     instance::{Instance, InstanceRaw},
+    simulation::Simulation,
     texture,
     vertex::Vertex,
 };
@@ -50,6 +51,8 @@ pub struct State {
     surface: Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
+
+    simulation: Simulation,
 
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
@@ -122,7 +125,7 @@ impl State {
             view_formats: vec![],
         };
 
-        let cells_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/cells.wgsl"));
+        let simulation = Simulation::new(&device);
 
         let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex-buf"),
@@ -203,6 +206,8 @@ impl State {
             texture::Texture::DEPTH_TEXTURE_LABEL,
         );
 
+        let cells_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/cells.wgsl"));
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render-pipeline-layout"),
@@ -254,6 +259,7 @@ impl State {
         });
 
         Ok(Self {
+            simulation,
             vertex_buf,
             index_buf,
             num_indices: INDICES.len() as u32,

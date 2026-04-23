@@ -1,6 +1,7 @@
 mod app;
 mod camera;
 mod instance;
+mod simulation;
 mod state;
 mod texture;
 mod vertex;
