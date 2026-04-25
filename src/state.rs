@@ -202,7 +202,7 @@ impl State {
 
         {
             let num_instances = self.simulation.num_instances() as u32;
-            let instance_buf_to_use = self.simulation.record(&mut encoder);
+            let instance_buf_to_use = self.simulation.record(&mut encoder, &self.device);
 
             self.cells.record(
                 &mut encoder,

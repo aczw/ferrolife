@@ -19,7 +19,7 @@ struct VertexOutput {
     @location(0) color: vec3f,
 }
 
-@binding(0) @group(0) var<uniform> camera: CameraUniform;
+@group(0) @binding(0) var<uniform> camera: CameraUniform;
 
 @vertex
 fn vs_main(vert_in: VertexInput, inst_in: InstanceInput) -> VertexOutput {

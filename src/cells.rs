@@ -25,7 +25,7 @@ pub struct Cells {
     num_indices: u32,
 
     depth_texture: texture::Texture,
-    render_pipeline: wgpu::RenderPipeline,
+    pipeline: wgpu::RenderPipeline,
 }
 
 impl Cells {
@@ -108,7 +108,7 @@ impl Cells {
             index_buf,
             num_indices: INDICES.len() as u32,
             depth_texture,
-            render_pipeline,
+            pipeline: render_pipeline,
         }
     }
 
@@ -128,8 +128,8 @@ impl Cells {
         instance_buf_to_use: &wgpu::Buffer,
         num_instances: u32,
     ) {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("render-pass"),
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("cells-render-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: surface_view,
                 depth_slice: None,
@@ -157,13 +157,13 @@ impl Cells {
             multiview_mask: None,
         });
 
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, camera_bg, &[]);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, camera_bg, &[]);
 
-        render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
-        render_pass.set_vertex_buffer(1, instance_buf_to_use.slice(..));
-        render_pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
+        pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+        pass.set_vertex_buffer(1, instance_buf_to_use.slice(..));
+        pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
 
-        render_pass.draw_indexed(0..self.num_indices, 0, 0..num_instances);
+        pass.draw_indexed(0..self.num_indices, 0, 0..num_instances);
     }
 }
