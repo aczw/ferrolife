@@ -31,6 +31,7 @@ pub struct Simulation {
     state_buf_b: wgpu::Buffer,
 
     ping_pong_bufs_bgl: wgpu::BindGroupLayout,
+    grid_dims_bg: wgpu::BindGroup,
     pipeline: wgpu::ComputePipeline,
 }
 
@@ -73,6 +74,12 @@ impl Simulation {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
         });
 
+        let grid_dims_unif_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("simulation-grid-dims-unif-buf"),
+            contents: bytemuck::cast_slice(&[GRID_WIDTH, GRID_HEIGHT]),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
         let ping_pong_bufs_bgl =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("simulation-ping-pong-bufs-bgl"),
@@ -100,10 +107,32 @@ impl Simulation {
                 ],
             });
 
+        let grid_dims_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("simulation-grid-dims-bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let grid_dims_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("simulation-grid-dims-bg"),
+            layout: &grid_dims_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: grid_dims_unif_buf.as_entire_binding(),
+            }],
+        });
+
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("simulation-compute-pipeline-layout"),
-                bind_group_layouts: &[Some(&ping_pong_bufs_bgl)],
+                bind_group_layouts: &[Some(&ping_pong_bufs_bgl), Some(&grid_dims_bgl)],
                 immediate_size: 0,
             });
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -121,6 +150,7 @@ impl Simulation {
             state_buf_a,
             state_buf_b,
             ping_pong_bufs_bgl,
+            grid_dims_bg,
             pipeline: compute_pipeline,
         }
     }
@@ -165,6 +195,7 @@ impl Simulation {
 
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &ping_pong_bufs_bg, &[]);
+        pass.set_bind_group(1, &self.grid_dims_bg, &[]);
 
         pass.dispatch_workgroups(NUM_WORKGROUPS_X, NUM_WORKGROUPS_Y, 1);
 
