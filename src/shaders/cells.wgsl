@@ -11,12 +11,12 @@ struct InstanceInput {
     @location(2) model_mat_1: vec4f,
     @location(3) model_mat_2: vec4f,
     @location(4) model_mat_3: vec4f,
-    @location(5) color: vec3f,
+    @location(5) color: vec4f,
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4f,
-    @location(0) color: vec3f,
+    @location(0) color: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
@@ -38,5 +38,5 @@ fn vs_main(vert_in: VertexInput, inst_in: InstanceInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    return vec4f(in.color, 1.0);
+    return in.color;
 }

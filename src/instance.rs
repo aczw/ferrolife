@@ -1,15 +1,15 @@
-use cgmath::{Matrix4, Vector3};
+use cgmath::{Matrix4, Vector3, Vector4};
 
 pub struct Instance {
     pub translation: Vector3<f32>,
-    pub color: Vector3<f32>,
+    pub color: Vector4<f32>,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
     model: [[f32; 4]; 4],
-    color: [f32; 3],
+    color: [f32; 4],
 }
 
 impl Instance {
@@ -48,7 +48,7 @@ impl InstanceRaw {
                     shader_location: 4,
                 },
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x4,
                     offset: std::mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
                     shader_location: 5,
                 },

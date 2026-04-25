@@ -1,4 +1,4 @@
-use cgmath::Vector3;
+use cgmath::{Vector3, Vector4};
 use wgpu::util::DeviceExt;
 
 use crate::instance::Instance;
@@ -49,10 +49,11 @@ impl Simulation {
                         y: y_flt,
                         z: 0.0,
                     } - INSTANCE_DISPLACEMENT;
-                    let color = Vector3 {
+                    let color = Vector4 {
                         x: x_flt / x_upper_bound,
                         y: y_flt / y_upper_bound,
                         z: 0.0,
+                        w: 1.0,
                     };
 
                     Instance { translation, color }
