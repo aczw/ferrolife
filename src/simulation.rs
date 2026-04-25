@@ -1,40 +1,94 @@
+use cgmath::Vector3;
+use wgpu::util::DeviceExt;
+
+use crate::instance::Instance;
+
+enum CurrentInstanceBuffer {
+    A,
+    B,
+}
+
 pub struct Simulation {
+    instances: Vec<Instance>,
+
+    current_instance_buf: CurrentInstanceBuffer,
     state_buf_a: wgpu::Buffer,
     state_buf_b: wgpu::Buffer,
 
     ping_pong_bufs_bgl: wgpu::BindGroupLayout,
-
     pipeline: wgpu::ComputePipeline,
 }
 
 impl Simulation {
-    pub fn new(device: &wgpu::Device) -> Self {
-        let state_buf_a = device.create_buffer(&wgpu::BufferDescriptor {
+    pub fn new(device: &wgpu::Device, grid_width: u32, grid_height: u32) -> Self {
+        // Recenter the instances at the world space origin
+        let instance_displacement: Vector3<f32> = Vector3::new(
+            (grid_width - 1) as f32 * 0.5,
+            (grid_height - 1) as f32 * 0.5,
+            0.0,
+        );
+
+        let instances = (0..grid_height)
+            .flat_map(|y| {
+                (0..grid_width).map(move |x| {
+                    let x_flt = x as f32;
+                    let x_upper_bound = (grid_width - 1) as f32;
+                    let y_flt = y as f32;
+                    let y_upper_bound = (grid_height - 1) as f32;
+
+                    let translation = Vector3 {
+                        x: x_flt,
+                        y: y_flt,
+                        z: 0.0,
+                    } - instance_displacement;
+                    let color = Vector3 {
+                        x: x_flt / x_upper_bound,
+                        y: y_flt / y_upper_bound,
+                        z: 0.0,
+                    };
+
+                    Instance { translation, color }
+                })
+            })
+            .collect::<Vec<_>>();
+        let instance_raw_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+
+        let state_buf_a = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("state-buf-a"),
-            size: 1,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
+            contents: bytemuck::cast_slice(&instance_raw_data),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
         });
-        let state_buf_b = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("state-buf-b"),
-            size: 1,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
+        let state_buf_b = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("state-buf-a"),
+            contents: bytemuck::cast_slice(&instance_raw_data),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
         });
 
         let ping_pong_bufs_bgl =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("ping-pong-bufs-bgl"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
         let compute_pipeline_layout =
@@ -53,10 +107,31 @@ impl Simulation {
         });
 
         Self {
+            instances,
+            current_instance_buf: CurrentInstanceBuffer::A,
             state_buf_a,
             state_buf_b,
             ping_pong_bufs_bgl,
             pipeline: compute_pipeline,
         }
+    }
+
+    pub fn record(&mut self, _encoder: &mut wgpu::CommandEncoder) -> &wgpu::Buffer {
+        match self.current_instance_buf {
+            CurrentInstanceBuffer::A => {
+                // Read from A, write to B
+                self.current_instance_buf = CurrentInstanceBuffer::B;
+                &self.state_buf_b
+            }
+            CurrentInstanceBuffer::B => {
+                // Read from B, write to A
+                self.current_instance_buf = CurrentInstanceBuffer::A;
+                &self.state_buf_a
+            }
+        }
+    }
+
+    pub fn num_instances(&self) -> usize {
+        self.instances.len()
     }
 }

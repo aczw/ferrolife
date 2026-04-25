@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use anyhow::Ok;
-use cgmath::Vector3;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 use crate::{
     camera::{self, Camera},
-    instance::{Instance, InstanceRaw},
+    instance::InstanceRaw,
     simulation::Simulation,
     texture,
     vertex::Vertex,
@@ -32,12 +31,6 @@ const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 const GRID_WIDTH: u32 = 70;
 const GRID_HEIGHT: u32 = 50;
-/// Recenters the instances at the world space origin.
-const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
-    (GRID_WIDTH - 1) as f32 * 0.5,
-    (GRID_HEIGHT - 1) as f32 * 0.5,
-    0.0,
-);
 
 pub struct Surface {
     handle: wgpu::Surface<'static>,
@@ -57,8 +50,6 @@ pub struct State {
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
     num_indices: u32,
-    instances: Vec<Instance>,
-    instance_buf: wgpu::Buffer,
 
     camera: Camera,
     camera_unif: camera::Uniform,
@@ -125,7 +116,7 @@ impl State {
             view_formats: vec![],
         };
 
-        let simulation = Simulation::new(&device);
+        let simulation = Simulation::new(&device, GRID_WIDTH, GRID_HEIGHT);
 
         let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex-buf"),
@@ -136,36 +127,6 @@ impl State {
             label: Some("index-buf"),
             contents: bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let instances = (0..GRID_HEIGHT)
-            .flat_map(|y| {
-                (0..GRID_WIDTH).map(move |x| {
-                    let x_flt = x as f32;
-                    let x_upper_bound = (GRID_WIDTH - 1) as f32;
-                    let y_flt = y as f32;
-                    let y_upper_bound = (GRID_HEIGHT - 1) as f32;
-
-                    let translation = Vector3 {
-                        x: x_flt,
-                        y: y_flt,
-                        z: 0.0,
-                    } - INSTANCE_DISPLACEMENT;
-                    let color = Vector3 {
-                        x: x_flt / x_upper_bound,
-                        y: y_flt / y_upper_bound,
-                        z: 0.0,
-                    };
-
-                    Instance { translation, color }
-                })
-            })
-            .collect::<Vec<_>>();
-        let instance_raw_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("instance-buf"),
-            contents: bytemuck::cast_slice(&instance_raw_data),
-            usage: wgpu::BufferUsages::VERTEX,
         });
 
         let camera = Camera::new(10.0, window_size.width as f32 / window_size.height as f32);
@@ -263,8 +224,6 @@ impl State {
             vertex_buf,
             index_buf,
             num_indices: INDICES.len() as u32,
-            instances,
-            instance_buf,
             window,
             surface: Surface {
                 handle: surface,
@@ -347,6 +306,8 @@ impl State {
                 label: Some("render-encoder"),
             });
 
+        let instance_buf_to_use = self.simulation.record(&mut encoder);
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("render-pass"),
@@ -381,10 +342,14 @@ impl State {
             render_pass.set_bind_group(0, &self.camera_bg, &[]);
 
             render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
-            render_pass.set_vertex_buffer(1, self.instance_buf.slice(..));
+            render_pass.set_vertex_buffer(1, instance_buf_to_use.slice(..));
             render_pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
+            render_pass.draw_indexed(
+                0..self.num_indices,
+                0,
+                0..self.simulation.num_instances() as _,
+            );
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
