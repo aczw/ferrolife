@@ -1,6 +1,7 @@
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use anyhow::Ok;
+use web_time::Instant;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
@@ -90,7 +91,7 @@ impl State {
             view_formats: vec![],
         };
 
-        let camera = Camera::new(10.0, window_size.width as f32 / window_size.height as f32);
+        let camera = Camera::new(30.0, window_size.width as f32 / window_size.height as f32);
         let mut camera_unif = camera::Uniform::new();
         camera_unif.update_view_proj(&camera);
         let camera_unif_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
