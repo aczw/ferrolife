@@ -29,9 +29,6 @@ const VERTICES: &[Vertex] = &[
 
 const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
-const GRID_WIDTH: u32 = 70;
-const GRID_HEIGHT: u32 = 50;
-
 pub struct Surface {
     handle: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -116,7 +113,7 @@ impl State {
             view_formats: vec![],
         };
 
-        let simulation = Simulation::new(&device, GRID_WIDTH, GRID_HEIGHT);
+        let simulation = Simulation::new(&device);
 
         let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex-buf"),

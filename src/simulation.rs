@@ -3,6 +3,16 @@ use wgpu::util::DeviceExt;
 
 use crate::instance::Instance;
 
+const GRID_WIDTH: u32 = 70;
+const GRID_HEIGHT: u32 = 50;
+
+/// Recenters the instances at the world space origin.
+const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
+    (GRID_WIDTH - 1) as f32 * 0.5,
+    (GRID_HEIGHT - 1) as f32 * 0.5,
+    0.0,
+);
+
 enum CurrentInstanceBuffer {
     A,
     B,
@@ -20,27 +30,20 @@ pub struct Simulation {
 }
 
 impl Simulation {
-    pub fn new(device: &wgpu::Device, grid_width: u32, grid_height: u32) -> Self {
-        // Recenter the instances at the world space origin
-        let instance_displacement: Vector3<f32> = Vector3::new(
-            (grid_width - 1) as f32 * 0.5,
-            (grid_height - 1) as f32 * 0.5,
-            0.0,
-        );
-
-        let instances = (0..grid_height)
+    pub fn new(device: &wgpu::Device) -> Self {
+        let instances = (0..GRID_HEIGHT)
             .flat_map(|y| {
-                (0..grid_width).map(move |x| {
+                (0..GRID_WIDTH).map(move |x| {
                     let x_flt = x as f32;
-                    let x_upper_bound = (grid_width - 1) as f32;
+                    let x_upper_bound = (GRID_WIDTH - 1) as f32;
                     let y_flt = y as f32;
-                    let y_upper_bound = (grid_height - 1) as f32;
+                    let y_upper_bound = (GRID_HEIGHT - 1) as f32;
 
                     let translation = Vector3 {
                         x: x_flt,
                         y: y_flt,
                         z: 0.0,
-                    } - instance_displacement;
+                    } - INSTANCE_DISPLACEMENT;
                     let color = Vector3 {
                         x: x_flt / x_upper_bound,
                         y: y_flt / y_upper_bound,
