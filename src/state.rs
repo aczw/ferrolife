@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use anyhow::Ok;
 use wgpu::util::DeviceExt;
@@ -31,6 +31,9 @@ pub struct State {
 
     simulation: Simulation,
     cells: Cells,
+
+    previous_instant: Instant,
+    elapsed: f32,
 }
 
 impl State {
@@ -124,6 +127,7 @@ impl State {
 
         Ok(Self {
             window,
+
             surface: Surface {
                 handle: surface,
                 config: surface_config,
@@ -131,13 +135,18 @@ impl State {
             },
             device,
             queue,
+
             camera,
             camera_unif,
             camera_unif_buf,
             camera_bg,
             camera_controller,
+
             simulation,
             cells,
+
+            previous_instant: Instant::now(),
+            elapsed: 0.0,
         })
     }
 
@@ -163,6 +172,11 @@ impl State {
         if !self.surface.is_configured {
             return Ok(());
         }
+
+        let now = Instant::now();
+        let delta_time = now - self.previous_instant;
+        self.previous_instant = now;
+        self.elapsed += delta_time.as_secs_f32();
 
         let output = match self.surface.handle.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
@@ -202,7 +216,13 @@ impl State {
 
         {
             let num_instances = self.simulation.num_instances() as u32;
-            let instance_buf_to_use = self.simulation.record(&mut encoder, &self.device);
+
+            let instance_buf_to_use = if self.elapsed >= 0.5 {
+                self.elapsed = 0.0;
+                self.simulation.record(&mut encoder, &self.device)
+            } else {
+                self.simulation.current_instance_buf_to_use()
+            };
 
             self.cells.record(
                 &mut encoder,

@@ -205,4 +205,11 @@ impl Simulation {
     pub fn num_instances(&self) -> usize {
         self.instances.len()
     }
+
+    pub fn current_instance_buf_to_use(&self) -> &wgpu::Buffer {
+        match self.current_instance_buf {
+            CurrentInstanceBuffer::A => &self.state_buf_a,
+            CurrentInstanceBuffer::B => &self.state_buf_b,
+        }
+    }
 }

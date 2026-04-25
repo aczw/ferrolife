@@ -17,7 +17,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
 
     let index = id.y * grid_dims.x + id.x;
     var prev = input[index];
-    prev.color += vec4f(0.01, 0.01, 0.01, 0.0);
+    prev.color += vec4f(0.1, 0.1, 0.1, 0.0);
 
     output[index] = prev;
 }
