@@ -1,5 +1,6 @@
 mod app;
 mod camera;
+mod cells;
 mod instance;
 mod simulation;
 mod state;

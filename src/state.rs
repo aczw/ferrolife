@@ -6,28 +6,9 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 use crate::{
     camera::{self, Camera},
-    instance::InstanceRaw,
+    cells::Cells,
     simulation::Simulation,
-    texture,
-    vertex::Vertex,
 };
-
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.5, 0.5, 0.0],
-    },
-    Vertex {
-        position: [-0.5, -0.5, 0.0],
-    },
-    Vertex {
-        position: [0.5, -0.5, 0.0],
-    },
-    Vertex {
-        position: [0.5, 0.5, 0.0],
-    },
-];
-
-const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 pub struct Surface {
     handle: wgpu::Surface<'static>,
@@ -42,21 +23,14 @@ pub struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
 
-    simulation: Simulation,
-
-    vertex_buf: wgpu::Buffer,
-    index_buf: wgpu::Buffer,
-    num_indices: u32,
-
     camera: Camera,
     camera_unif: camera::Uniform,
     camera_unif_buf: wgpu::Buffer,
     camera_bg: wgpu::BindGroup,
     camera_controller: camera::Controller,
 
-    depth_texture: texture::Texture,
-
-    render_pipeline: wgpu::RenderPipeline,
+    simulation: Simulation,
+    cells: Cells,
 }
 
 impl State {
@@ -113,19 +87,6 @@ impl State {
             view_formats: vec![],
         };
 
-        let simulation = Simulation::new(&device);
-
-        let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex-buf"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("index-buf"),
-            contents: bytemuck::cast_slice(INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
         let camera = Camera::new(10.0, window_size.width as f32 / window_size.height as f32);
         let mut camera_unif = camera::Uniform::new();
         camera_unif.update_view_proj(&camera);
@@ -158,69 +119,10 @@ impl State {
 
         let camera_controller = camera::Controller::new(0.2, 0.05);
 
-        let depth_texture = texture::Texture::create_depth_texture(
-            &device,
-            &surface_config,
-            texture::Texture::DEPTH_TEXTURE_LABEL,
-        );
-
-        let cells_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/cells.wgsl"));
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("render-pipeline-layout"),
-                bind_group_layouts: &[Some(&camera_bgl)],
-                immediate_size: 0,
-            });
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("render-pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &cells_shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Vertex::buf_layout(), InstanceRaw::buf_layout()],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: texture::Texture::DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &cells_shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: surface_config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let simulation = Simulation::new(&device);
+        let cells = Cells::new(&device, &surface_config, &camera_bgl);
 
         Ok(Self {
-            simulation,
-            vertex_buf,
-            index_buf,
-            num_indices: INDICES.len() as u32,
             window,
             surface: Surface {
                 handle: surface,
@@ -234,8 +136,8 @@ impl State {
             camera_unif_buf,
             camera_bg,
             camera_controller,
-            depth_texture,
-            render_pipeline,
+            simulation,
+            cells,
         })
     }
 
@@ -247,11 +149,7 @@ impl State {
             surface.handle.configure(&self.device, &surface.config);
             surface.is_configured = true;
 
-            self.depth_texture = texture::Texture::create_depth_texture(
-                &self.device,
-                &self.surface.config,
-                texture::Texture::DEPTH_TEXTURE_LABEL,
-            );
+            self.cells.resize(&self.device, &surface.config);
             self.camera
                 .update_aspect_ratio(width as f32 / height as f32);
 
@@ -296,56 +194,22 @@ impl State {
             label: Some("surface-view"),
             ..Default::default()
         });
-
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("render-encoder"),
+                label: Some("command-encoder"),
             });
-
-        let instance_buf_to_use = self.simulation.record(&mut encoder);
 
         {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("render-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &surface_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+            let num_instances = self.simulation.num_instances() as u32;
+            let instance_buf_to_use = self.simulation.record(&mut encoder);
 
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.camera_bg, &[]);
-
-            render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
-            render_pass.set_vertex_buffer(1, instance_buf_to_use.slice(..));
-            render_pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
-
-            render_pass.draw_indexed(
-                0..self.num_indices,
-                0,
-                0..self.simulation.num_instances() as _,
+            self.cells.record(
+                &mut encoder,
+                &surface_view,
+                &self.camera_bg,
+                instance_buf_to_use,
+                num_instances,
             );
         }
 
