@@ -3,8 +3,8 @@ use wgpu::util::DeviceExt;
 
 use crate::instance::Instance;
 
-pub const GRID_WIDTH: u32 = 70;
-pub const GRID_HEIGHT: u32 = 50;
+pub const GRID_WIDTH: u32 = 400;
+pub const GRID_HEIGHT: u32 = 300;
 
 /// Recenters the instances at the world space origin.
 const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
