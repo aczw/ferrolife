@@ -35,6 +35,7 @@ pub struct State {
 
     previous_instant: Instant,
     elapsed: f32,
+    is_paused: bool,
 }
 
 impl State {
@@ -148,6 +149,7 @@ impl State {
 
             previous_instant: Instant::now(),
             elapsed: 0.0,
+            is_paused: false,
         })
     }
 
@@ -177,7 +179,9 @@ impl State {
         let now = Instant::now();
         let delta_time = now - self.previous_instant;
         self.previous_instant = now;
-        self.elapsed += delta_time.as_secs_f32();
+        if !self.is_paused {
+            self.elapsed += delta_time.as_secs_f32();
+        }
 
         let output = match self.surface.handle.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
@@ -218,7 +222,7 @@ impl State {
         {
             let num_instances = self.simulation.num_instances() as u32;
 
-            let instance_buf_to_use = if self.elapsed >= 0.5 {
+            let instance_buf_to_use = if !self.is_paused && self.elapsed >= 0.5 {
                 self.elapsed = 0.0;
                 self.simulation.record(&mut encoder, &self.device)
             } else {
@@ -243,6 +247,9 @@ impl State {
     pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
         if code == KeyCode::Escape && is_pressed {
             event_loop.exit();
+        } else if code == KeyCode::Space && is_pressed {
+            self.is_paused = !self.is_paused;
+            self.elapsed = 0.0;
         } else if self.camera_controller.handle_key(code, is_pressed) {
             self.update();
         }
