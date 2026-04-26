@@ -275,9 +275,19 @@ impl Simulation {
                 let src_idx = ((src_y * image_width + src_x) * 4) as usize;
                 let alpha = rgba_bytes[src_idx + 3] as f32 / 255.0;
 
+                // See: https://en.wikipedia.org/wiki/SRGB#Transfer_function_(%22gamma%22)
+                let srgb_to_linear = |srgb: f32| {
+                    if srgb <= 0.04045 {
+                        srgb / 12.92
+                    } else {
+                        ((srgb + 0.055) / 1.055).powf(2.4)
+                    }
+                };
+
                 let to_channel = |byte: u8| {
-                    let channel = (byte as f32 / 255.0) * alpha;
-                    if channel >= 0.10 { channel } else { 0.0 }
+                    let srgb = byte as f32 / 255.0;
+                    let channel = srgb_to_linear(srgb) * alpha;
+                    if channel >= 0.01 { channel } else { 0.0 }
                 };
 
                 let color = Vector4::new(

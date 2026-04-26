@@ -185,31 +185,30 @@ impl State {
             self.elapsed += delta_time.as_secs_f32();
         }
 
-        let output = match self.surface.handle.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
-                self.surface
-                    .handle
-                    .configure(&self.device, &self.surface.config);
-                surface_texture
-            }
-            wgpu::CurrentSurfaceTexture::Timeout
-            | wgpu::CurrentSurfaceTexture::Occluded
-            | wgpu::CurrentSurfaceTexture::Validation => {
-                return Ok(()); // Skip this frame
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface
-                    .handle
-                    .configure(&self.device, &self.surface.config);
-                return Ok(());
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                // We would have to recreate the devices and all resources created,
-                // but we'll just bail now
-                anyhow::bail!("Lost device");
-            }
-        };
+        let (output, should_reconfigure_after_present) =
+            match self.surface.handle.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(surface_texture) => (surface_texture, false),
+                wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
+                    // Reconfigure only after presenting and dropping this frame output
+                    (surface_texture, true)
+                }
+                wgpu::CurrentSurfaceTexture::Timeout
+                | wgpu::CurrentSurfaceTexture::Occluded
+                | wgpu::CurrentSurfaceTexture::Validation => {
+                    return Ok(()); // Skip this frame
+                }
+                wgpu::CurrentSurfaceTexture::Outdated => {
+                    self.surface
+                        .handle
+                        .configure(&self.device, &self.surface.config);
+                    return Ok(());
+                }
+                wgpu::CurrentSurfaceTexture::Lost => {
+                    // We would have to recreate the devices and all resources created,
+                    // but we'll just bail now
+                    anyhow::bail!("Lost device");
+                }
+            };
 
         let surface_view = output.texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("surface-view"),
@@ -242,6 +241,12 @@ impl State {
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
+
+        if should_reconfigure_after_present {
+            self.surface
+                .handle
+                .configure(&self.device, &self.surface.config);
+        }
 
         Ok(())
     }
