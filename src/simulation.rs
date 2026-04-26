@@ -17,6 +17,46 @@ const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
 const WORKGROUP_SIZE: u32 = 16;
 const NUM_WORKGROUPS_X: u32 = GRID_WIDTH.div_ceil(WORKGROUP_SIZE);
 const NUM_WORKGROUPS_Y: u32 = GRID_HEIGHT.div_ceil(WORKGROUP_SIZE);
+const COLOR_LIVE_DENSITY: f32 = 0.30;
+
+fn hash01(x: u32, y: u32, seed: u32) -> f32 {
+    let mut h = x.wrapping_mul(0x9E37_79B9) ^ y.wrapping_mul(0x85EB_CA6B) ^ seed;
+    h ^= h >> 16;
+    h = h.wrapping_mul(0x7FEB_352D);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x846C_A68B);
+    h ^= h >> 16;
+    (h as f32) / (u32::MAX as f32)
+}
+
+fn initial_color(x: u32, y: u32) -> Vector4<f32> {
+    let r_alive = hash01(x, y, 0xA511_E9B3) < COLOR_LIVE_DENSITY;
+    let g_alive = hash01(x, y, 0x63D8_35A7) < COLOR_LIVE_DENSITY;
+    let b_alive = hash01(x, y, 0xC2B2_AE35) < COLOR_LIVE_DENSITY;
+
+    let r = if r_alive {
+        0.35 + 0.65 * hash01(x, y, 0x8DA6_B343)
+    } else {
+        0.0
+    };
+    let g = if g_alive {
+        0.35 + 0.65 * hash01(x, y, 0xD816_3841)
+    } else {
+        0.0
+    };
+    let b = if b_alive {
+        0.35 + 0.65 * hash01(x, y, 0xCB1A_B31F)
+    } else {
+        0.0
+    };
+
+    Vector4 {
+        x: r,
+        y: g,
+        z: b,
+        w: 1.0,
+    }
+}
 
 enum CurrentInstanceBuffer {
     A,
@@ -41,21 +81,14 @@ impl Simulation {
             .flat_map(|y| {
                 (0..GRID_WIDTH).map(move |x| {
                     let x_flt = x as f32;
-                    let x_upper_bound = (GRID_WIDTH - 1) as f32;
                     let y_flt = y as f32;
-                    let y_upper_bound = (GRID_HEIGHT - 1) as f32;
 
                     let translation = Vector3 {
                         x: x_flt,
                         y: y_flt,
                         z: 0.0,
                     } - INSTANCE_DISPLACEMENT;
-                    let color = Vector4 {
-                        x: x_flt / x_upper_bound,
-                        y: y_flt / y_upper_bound,
-                        z: 0.0,
-                        w: 1.0,
-                    };
+                    let color = initial_color(x, y);
 
                     Instance { translation, color }
                 })
