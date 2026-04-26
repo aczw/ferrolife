@@ -17,7 +17,7 @@ const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
 const WORKGROUP_SIZE: u32 = 16;
 const NUM_WORKGROUPS_X: u32 = GRID_WIDTH.div_ceil(WORKGROUP_SIZE);
 const NUM_WORKGROUPS_Y: u32 = GRID_HEIGHT.div_ceil(WORKGROUP_SIZE);
-const COLOR_LIVE_DENSITY: f32 = 0.30;
+const INITIAL_LIVE_DENSITY: f32 = 0.30;
 
 fn hash01(x: u32, y: u32, seed: u32) -> f32 {
     let mut h = x.wrapping_mul(0x9E37_79B9) ^ y.wrapping_mul(0x85EB_CA6B) ^ seed;
@@ -29,33 +29,41 @@ fn hash01(x: u32, y: u32, seed: u32) -> f32 {
     (h as f32) / (u32::MAX as f32)
 }
 
+fn hsv_to_rgb(h: f32, s: f32, v: f32) -> Vector3<f32> {
+    let h6 = (h.fract() * 6.0).abs();
+    let c = v * s;
+    let x = c * (1.0 - ((h6 % 2.0) - 1.0).abs());
+    let m = v - c;
+
+    let (r1, g1, b1) = if h6 < 1.0 {
+        (c, x, 0.0)
+    } else if h6 < 2.0 {
+        (x, c, 0.0)
+    } else if h6 < 3.0 {
+        (0.0, c, x)
+    } else if h6 < 4.0 {
+        (0.0, x, c)
+    } else if h6 < 5.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    Vector3::new(r1 + m, g1 + m, b1 + m)
+}
+
 fn initial_color(x: u32, y: u32) -> Vector4<f32> {
-    let r_alive = hash01(x, y, 0xA511_E9B3) < COLOR_LIVE_DENSITY;
-    let g_alive = hash01(x, y, 0x63D8_35A7) < COLOR_LIVE_DENSITY;
-    let b_alive = hash01(x, y, 0xC2B2_AE35) < COLOR_LIVE_DENSITY;
-
-    let r = if r_alive {
-        0.35 + 0.65 * hash01(x, y, 0x8DA6_B343)
-    } else {
-        0.0
-    };
-    let g = if g_alive {
-        0.35 + 0.65 * hash01(x, y, 0xD816_3841)
-    } else {
-        0.0
-    };
-    let b = if b_alive {
-        0.35 + 0.65 * hash01(x, y, 0xCB1A_B31F)
-    } else {
-        0.0
-    };
-
-    Vector4 {
-        x: r,
-        y: g,
-        z: b,
-        w: 1.0,
+    let is_alive = hash01(x, y, 0xA511_E9B3) < INITIAL_LIVE_DENSITY;
+    if !is_alive {
+        return Vector4::new(0.0, 0.0, 0.0, 1.0);
     }
+
+    let hue = hash01(x, y, 0x8DA6_B343);
+    let saturation = 0.82 + 0.16 * hash01(x, y, 0xD816_3841);
+    let value = 0.78 + 0.20 * hash01(x, y, 0xCB1A_B31F);
+    let color = hsv_to_rgb(hue, saturation, value);
+
+    Vector4::new(color.x, color.y, color.z, 1.0)
 }
 
 enum CurrentInstanceBuffer {

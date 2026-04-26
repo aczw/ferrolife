@@ -8,6 +8,9 @@ struct CellState {
 
 @group(1) @binding(0) var<uniform> grid_dims: vec2u;
 
+const alive_threshold = 0.3f;
+const neighbor_blend = 0.2f;
+
 const neighbor_deltas = array<vec2i, 8>(
     vec2i(-1, -1),
     vec2i(-1, 0),
@@ -23,44 +26,50 @@ fn get_index(id: vec3u) -> u32 {
     return id.y * grid_dims.x + id.x;
 }
 
+fn is_alive(color: vec3f) -> bool {
+    return max(color.r, max(color.g, color.b)) > alive_threshold;
+}
+
 struct NeighborState {
-    num_alive: vec3u, // number of alive neighbor cells per channel
+    num_alive: u32,
     avg_color: vec3f,
 }
 
 fn get_neighbor_state(id: vec3u) -> NeighborState {
-    var state = NeighborState(vec3u(0u), vec3f(0.0));
+    var state = NeighborState(0u, vec3f(0.0));
+
     var total_color = vec3f(0.0);
     for (var i = 0u; i < 8u; i++) {
         let neighbor = vec3i(id) + vec3i(neighbor_deltas[i], 0);
         if neighbor.x >= 0 && neighbor.x < i32(grid_dims.x) &&
             neighbor.y >= 0 && neighbor.y < i32(grid_dims.y) {
             let cell = input[get_index(vec3u(neighbor))];
-            total_color += cell.color.rgb;
-            let alive_mask = cell.color.rgb > vec3f(0.3);
-            state.num_alive += select(vec3u(0u), vec3u(1u), alive_mask);
+            if is_alive(cell.color.rgb) {
+                state.num_alive += 1u;
+                total_color += cell.color.rgb;
+            }
         }
     }
 
-    let has_alive = state.num_alive > vec3u(0u);
-    let denom = vec3f(max(state.num_alive, vec3u(1u)));
-    state.avg_color = select(vec3f(0.0), total_color / denom, has_alive);
+    if state.num_alive > 0u {
+        state.avg_color = total_color / f32(state.num_alive);
+    }
 
     return state;
 }
 
-fn update_channel(prev_channel: f32, alive_neighbors: u32, avg_channel: f32) -> f32 {
-    if prev_channel > 0.3 {
-        if alive_neighbors == 2u || alive_neighbors == 3u {
-            return prev_channel;
+fn update_color(prev_color: vec3f, state: NeighborState) -> vec3f {
+    if is_alive(prev_color) {
+        if state.num_alive == 2u || state.num_alive == 3u {
+            return prev_color * (1.0 - neighbor_blend) + state.avg_color * neighbor_blend;
         }
-        return 0.0;
+        return vec3f(0.0);
     }
 
-    if alive_neighbors == 3u {
-        return avg_channel;
+    if state.num_alive == 3u {
+        return state.avg_color;
     }
-    return 0.0;
+    return vec3f(0.0);
 }
 
 @compute
@@ -74,10 +83,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     var prev = input[index];
 
     let neighbor_state = get_neighbor_state(id);
-
-    prev.color.r = update_channel(prev.color.r, neighbor_state.num_alive.r, neighbor_state.avg_color.r);
-    prev.color.g = update_channel(prev.color.g, neighbor_state.num_alive.g, neighbor_state.avg_color.g);
-    prev.color.b = update_channel(prev.color.b, neighbor_state.num_alive.b, neighbor_state.avg_color.b);
+    prev.color = vec4(update_color(prev.color.rgb, neighbor_state), 1.0);
 
     output[index] = prev;
 }
