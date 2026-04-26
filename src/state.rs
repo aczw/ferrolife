@@ -1,3 +1,5 @@
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Ok;
@@ -252,6 +254,31 @@ impl State {
             self.elapsed = 0.0;
         } else if self.camera_controller.handle_key(code, is_pressed) {
             self.update();
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_board_from_image_path(&mut self, path: &Path) -> anyhow::Result<()> {
+        let image = image::open(path)?;
+        let rgba_image = image.to_rgba8();
+        let (image_width, image_height) = rgba_image.dimensions();
+
+        self.simulation.set_state_from_rgba_image(
+            &self.queue,
+            image_width,
+            image_height,
+            rgba_image.as_raw(),
+        )?;
+
+        self.is_paused = true;
+        self.elapsed = 0.0;
+        Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn handle_dropped_file(&mut self, path: std::path::PathBuf) {
+        if let Err(err) = self.load_board_from_image_path(&path) {
+            log::error!("failed to load dropped image {}: {err}", path.display());
         }
     }
 

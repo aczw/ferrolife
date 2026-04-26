@@ -3,8 +3,8 @@ use wgpu::util::DeviceExt;
 
 use crate::instance::Instance;
 
-const GRID_WIDTH: u32 = 70;
-const GRID_HEIGHT: u32 = 50;
+pub const GRID_WIDTH: u32 = 70;
+pub const GRID_HEIGHT: u32 = 50;
 
 /// Recenters the instances at the world space origin.
 const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
@@ -99,12 +99,16 @@ impl Simulation {
         let state_buf_a = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("simulation-state-buf-a"),
             contents: bytemuck::cast_slice(&instance_raw_data),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST,
         });
         let state_buf_b = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("simulation-state-buf-a"),
+            label: Some("simulation-state-buf-b"),
             contents: bytemuck::cast_slice(&instance_raw_data),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST,
         });
 
         let grid_dims_unif_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -244,5 +248,67 @@ impl Simulation {
             CurrentInstanceBuffer::A => &self.state_buf_a,
             CurrentInstanceBuffer::B => &self.state_buf_b,
         }
+    }
+
+    pub fn set_state_from_rgba_image(
+        &mut self,
+        queue: &wgpu::Queue,
+        image_width: u32,
+        image_height: u32,
+        rgba_bytes: &[u8],
+    ) -> anyhow::Result<()> {
+        let expected_len = (image_width as usize)
+            .saturating_mul(image_height as usize)
+            .saturating_mul(4);
+        if rgba_bytes.len() != expected_len {
+            anyhow::bail!(
+                "invalid image data length: expected {expected_len}, got {}",
+                rgba_bytes.len()
+            );
+        }
+
+        for y in 0..GRID_HEIGHT {
+            for x in 0..GRID_WIDTH {
+                let src_x = x.saturating_mul(image_width) / GRID_WIDTH;
+                // Flip Y to keep uploaded images visually upright.
+                let src_y = (GRID_HEIGHT - 1 - y).saturating_mul(image_height) / GRID_HEIGHT;
+                let src_idx = ((src_y * image_width + src_x) * 4) as usize;
+                let alpha = rgba_bytes[src_idx + 3] as f32 / 255.0;
+
+                let to_channel = |byte: u8| {
+                    let channel = (byte as f32 / 255.0) * alpha;
+                    if channel >= 0.10 { channel } else { 0.0 }
+                };
+
+                let color = Vector4::new(
+                    to_channel(rgba_bytes[src_idx]),
+                    to_channel(rgba_bytes[src_idx + 1]),
+                    to_channel(rgba_bytes[src_idx + 2]),
+                    1.0,
+                );
+                let dst_idx = (y * GRID_WIDTH + x) as usize;
+                self.instances[dst_idx].color = color;
+            }
+        }
+
+        let instance_raw_data = self
+            .instances
+            .iter()
+            .map(Instance::to_raw)
+            .collect::<Vec<_>>();
+
+        queue.write_buffer(
+            &self.state_buf_a,
+            0,
+            bytemuck::cast_slice(&instance_raw_data),
+        );
+        queue.write_buffer(
+            &self.state_buf_b,
+            0,
+            bytemuck::cast_slice(&instance_raw_data),
+        );
+        self.current_instance_buf = CurrentInstanceBuffer::A;
+
+        Ok(())
     }
 }

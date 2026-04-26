@@ -1,38 +1,67 @@
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::EventLoopExtWebSys;
 use winit::{
     application::ApplicationHandler,
     event::{KeyEvent, WindowEvent},
-    event_loop::EventLoop,
+    event_loop::{EventLoop, EventLoopProxy},
     keyboard::PhysicalKey,
     window::Window,
 };
-#[cfg(target_arch = "wasm32")]
-use winit::{event_loop::EventLoopProxy, platform::web::EventLoopExtWebSys};
 
 use crate::state::State;
 
-pub struct App {
+pub enum UserEvent {
     #[cfg(target_arch = "wasm32")]
-    proxy: Option<EventLoopProxy<State>>,
+    StateReady(State),
+    #[cfg(not(target_arch = "wasm32"))]
+    FileDialogResult(Option<PathBuf>),
+}
+
+pub struct App {
+    proxy: EventLoopProxy<UserEvent>,
     state: Option<State>,
+    #[cfg(not(target_arch = "wasm32"))]
+    is_file_dialog_open: bool,
 }
 
 impl App {
-    pub fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
-        #[cfg(target_arch = "wasm32")]
-        let proxy = Some(event_loop.create_proxy());
+    pub fn new(event_loop: &EventLoop<UserEvent>) -> Self {
+        let proxy = event_loop.create_proxy();
         Self {
             state: None,
-            #[cfg(target_arch = "wasm32")]
             proxy,
+            #[cfg(not(target_arch = "wasm32"))]
+            is_file_dialog_open: false,
         }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_file_dialog(&mut self) {
+        if self.is_file_dialog_open {
+            return;
+        }
+
+        self.is_file_dialog_open = true;
+        let proxy = self.proxy.clone();
+
+        // Need to run file dialog in a separate thread to avoid stalling the UI
+        std::thread::spawn(move || {
+            let selected = rfd::FileDialog::new()
+                .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif", "webp"])
+                .pick_file();
+
+            let _ = proxy.send_event(UserEvent::FileDialogResult(selected));
+        });
     }
 }
 
-impl ApplicationHandler<State> for App {
+impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes();
@@ -63,31 +92,45 @@ impl ApplicationHandler<State> for App {
         #[cfg(target_arch = "wasm32")]
         {
             // Run the proxy asynchronously and use it to send the results to the event loop
-            if let Some(proxy) = self.proxy.take() {
-                wasm_bindgen_futures::spawn_local(async move {
-                    assert!(
-                        proxy
-                            .send_event(State::new(window).await.expect("Failed to create canvas"))
-                            .is_ok()
-                    )
-                });
-            }
+            let proxy = self.proxy.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                assert!(
+                    proxy
+                        .send_event(UserEvent::StateReady(
+                            State::new(window).await.expect("Failed to create canvas"),
+                        ))
+                        .is_ok()
+                )
+            });
         }
     }
 
     #[allow(unused_mut)]
-    fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, mut event: State) {
-        // `proxy.send_event()` sends the event here
-        #[cfg(target_arch = "wasm32")]
-        {
-            event.window.request_redraw();
-            event.resize(
-                event.window.inner_size().width,
-                event.window.inner_size().height,
-            );
-        }
+    fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, event: UserEvent) {
+        match event {
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::StateReady(mut state) => {
+                // `proxy.send_event()` sends initialization event here on wasm.
+                #[cfg(target_arch = "wasm32")]
+                {
+                    state.window.request_redraw();
+                    state.resize(
+                        state.window.inner_size().width,
+                        state.window.inner_size().height,
+                    );
+                }
 
-        self.state = Some(event);
+                self.state = Some(state);
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            UserEvent::FileDialogResult(path) => {
+                self.is_file_dialog_open = false;
+
+                if let (Some(state), Some(path)) = (&mut self.state, path) {
+                    state.handle_dropped_file(path);
+                }
+            }
+        }
     }
 
     fn window_event(
@@ -104,6 +147,8 @@ impl ApplicationHandler<State> for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
+            #[cfg(not(target_arch = "wasm32"))]
+            WindowEvent::DroppedFile(path) => state.handle_dropped_file(path),
             WindowEvent::RedrawRequested => {
                 state.update();
                 match state.render() {
@@ -122,7 +167,15 @@ impl ApplicationHandler<State> for App {
                         ..
                     },
                 ..
-            } => state.handle_key(event_loop, code, key_state.is_pressed()),
+            } => {
+                #[cfg(not(target_arch = "wasm32"))]
+                if code == winit::keyboard::KeyCode::KeyU && key_state.is_pressed() {
+                    self.open_file_dialog();
+                    return;
+                }
+
+                state.handle_key(event_loop, code, key_state.is_pressed())
+            }
             _ => {}
         }
     }
@@ -138,11 +191,11 @@ pub fn run() -> anyhow::Result<()> {
         console_log::init_with_level(log::Level::Info).unwrap_throw();
     }
 
-    let event_loop = EventLoop::with_user_event().build()?;
+    let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let mut app = App::new();
+        let mut app = App::new(&event_loop);
         event_loop.run_app(&mut app)?;
     }
     #[cfg(target_arch = "wasm32")]
