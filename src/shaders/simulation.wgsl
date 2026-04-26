@@ -37,7 +37,7 @@ fn get_neighbor_state(id: vec3u) -> NeighborState {
             neighbor.y >= 0 && neighbor.y < i32(grid_dims.y) {
             let cell = input[get_index(vec3u(neighbor))];
             total_color += cell.color.rgb;
-            let alive_mask = cell.color.rgb > vec3f(0.0);
+            let alive_mask = cell.color.rgb > vec3f(0.3);
             state.num_alive += select(vec3u(0u), vec3u(1u), alive_mask);
         }
     }
@@ -50,7 +50,7 @@ fn get_neighbor_state(id: vec3u) -> NeighborState {
 }
 
 fn update_channel(prev_channel: f32, alive_neighbors: u32, avg_channel: f32) -> f32 {
-    if prev_channel > 0.0 {
+    if prev_channel > 0.3 {
         if alive_neighbors == 2u || alive_neighbors == 3u {
             return prev_channel;
         }

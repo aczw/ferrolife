@@ -286,8 +286,7 @@ impl Simulation {
 
                 let to_channel = |byte: u8| {
                     let srgb = byte as f32 / 255.0;
-                    let channel = srgb_to_linear(srgb) * alpha;
-                    if channel >= 0.01 { channel } else { 0.0 }
+                    srgb_to_linear(srgb) * alpha
                 };
 
                 let color = Vector4::new(
