@@ -410,7 +410,6 @@ impl State {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_board_from_image_bytes(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
         let image = image::load_from_memory(bytes)?;
         let rgba_image = image.to_rgba8();

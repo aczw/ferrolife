@@ -32,7 +32,7 @@ console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 wasm-bindgen = "0.2.118"
 wasm-bindgen-futures = "0.4.68"
-web-sys = { version = "0.3.95", features = ["Document", "Window", "Element", "Event", "EventTarget", "HtmlElement", "HtmlInputElement"] }
+web-sys = { version = "0.3.95", features = ["Blob", "Document", "Element", "Event", "EventTarget", "File", "FileList", "HtmlElement", "HtmlInputElement", "Window"] }
 
 # See https://github.com/trunk-rs/trunk/issues/991#issuecomment-3139927457
 [package.metadata.wasm-pack.profile.profiling]

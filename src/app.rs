@@ -9,6 +9,8 @@ use wasm_bindgen::closure::Closure;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
+use web_sys::js_sys::Uint8Array;
+#[cfg(target_arch = "wasm32")]
 use winit::platform::web::EventLoopExtWebSys;
 use winit::{
     application::ApplicationHandler,
@@ -33,6 +35,8 @@ pub enum UserEvent {
     SetLiveCellColor([f32; 3]),
     #[cfg(target_arch = "wasm32")]
     ClearBoard,
+    #[cfg(target_arch = "wasm32")]
+    LoadImageBytes(Vec<u8>),
     #[cfg(not(target_arch = "wasm32"))]
     FileDialogResult(Option<PathBuf>),
 }
@@ -41,6 +45,9 @@ pub enum UserEvent {
 struct WebControls {
     _container: web_sys::Element,
     _pause_click: Closure<dyn FnMut(web_sys::Event)>,
+    _upload_image_click: Closure<dyn FnMut(web_sys::Event)>,
+    _upload_input_change: Closure<dyn FnMut(web_sys::Event)>,
+    _upload_input: web_sys::HtmlInputElement,
     _alive_threshold_input: Closure<dyn FnMut(web_sys::Event)>,
     _live_color_input: Closure<dyn FnMut(web_sys::Event)>,
     _clear_board_click: Closure<dyn FnMut(web_sys::Event)>,
@@ -123,6 +130,20 @@ impl App {
             "border:0;border-radius:6px;padding:6px 10px;cursor:pointer;background:#f0f0f0;color:#1f1f1f;font:600 13px sans-serif;",
         )?;
 
+        let upload_image_button = document.create_element("button")?;
+        upload_image_button.set_text_content(Some("Upload Image"));
+        upload_image_button.set_attribute(
+            "style",
+            "border:0;border-radius:6px;padding:6px 10px;cursor:pointer;background:#f0f0f0;color:#1f1f1f;font:600 13px sans-serif;",
+        )?;
+
+        let upload_input: web_sys::HtmlInputElement =
+            document.create_element("input")?.dyn_into()?;
+        upload_input.set_type("file");
+        upload_input.set_accept("image/*");
+        upload_input.set_id("upload-image-input");
+        upload_input.set_attribute("style", "display:none;")?;
+
         let alive_label = document.create_element("span")?;
         alive_label.set_text_content(Some("Threshold"));
         alive_label.set_attribute("style", "color:#f5f5f5;font:500 12px sans-serif;")?;
@@ -154,12 +175,14 @@ impl App {
         )?;
 
         container.append_child(&pause_button)?;
+        container.append_child(&upload_image_button)?;
         container.append_child(&alive_label)?;
         container.append_child(&alive_slider)?;
         container.append_child(&live_color_label)?;
         container.append_child(&live_color_input)?;
         container.append_child(&clear_board_button)?;
         body.append_child(&container)?;
+        body.append_child(&upload_input)?;
 
         let pause_proxy = self.proxy.clone();
         let pause_click = Closure::wrap(Box::new(move |_event: web_sys::Event| {
@@ -167,6 +190,43 @@ impl App {
         }) as Box<dyn FnMut(_)>);
         pause_button
             .add_event_listener_with_callback("click", pause_click.as_ref().unchecked_ref())?;
+
+        let upload_input_for_click = upload_input.clone();
+        let upload_image_click = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            upload_input_for_click.click();
+        }) as Box<dyn FnMut(_)>);
+        upload_image_button.add_event_listener_with_callback(
+            "click",
+            upload_image_click.as_ref().unchecked_ref(),
+        )?;
+
+        let upload_proxy = self.proxy.clone();
+        let upload_input_for_change = upload_input.clone();
+        let upload_input_change = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            let Some(files) = upload_input_for_change.files() else {
+                return;
+            };
+            let Some(file) = files.get(0) else {
+                return;
+            };
+
+            let proxy = upload_proxy.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
+                    Ok(buffer) => {
+                        let bytes = Uint8Array::new(&buffer).to_vec();
+                        let _ = proxy.send_event(UserEvent::LoadImageBytes(bytes));
+                    }
+                    Err(err) => {
+                        log::error!("failed reading uploaded image bytes: {err:?}");
+                    }
+                }
+            });
+        }) as Box<dyn FnMut(_)>);
+        upload_input.add_event_listener_with_callback(
+            "change",
+            upload_input_change.as_ref().unchecked_ref(),
+        )?;
 
         let threshold_proxy = self.proxy.clone();
         let alive_slider_for_input = alive_slider.clone();
@@ -185,8 +245,9 @@ impl App {
 
         let color_proxy = self.proxy.clone();
         let live_color_input_for_event = live_color_input.clone();
+        let live_color_input_for_callback = live_color_input.clone();
         let live_color_input = Closure::wrap(Box::new(move |_event: web_sys::Event| {
-            if let Some(color) = parse_html_hex_color(&live_color_input_for_event.value()) {
+            if let Some(color) = parse_html_hex_color(&live_color_input_for_callback.value()) {
                 let _ = color_proxy.send_event(UserEvent::SetLiveCellColor(color));
             }
         }) as Box<dyn FnMut(_)>);
@@ -205,6 +266,9 @@ impl App {
         self.web_controls = Some(WebControls {
             _container: container,
             _pause_click: pause_click,
+            _upload_image_click: upload_image_click,
+            _upload_input_change: upload_input_change,
+            _upload_input: upload_input,
             _alive_threshold_input: alive_threshold_input,
             _live_color_input: live_color_input,
             _clear_board_click: clear_board_click,
@@ -307,6 +371,14 @@ impl ApplicationHandler<UserEvent> for App {
                     state.clear_board();
                 }
             }
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::LoadImageBytes(bytes) => {
+                if let Some(state) = &mut self.state {
+                    if let Err(err) = state.load_board_from_image_bytes(&bytes) {
+                        log::error!("failed to load uploaded image: {err}");
+                    }
+                }
+            }
             #[cfg(not(target_arch = "wasm32"))]
             UserEvent::FileDialogResult(path) => {
                 self.is_file_dialog_open = false;
@@ -382,6 +454,18 @@ impl ApplicationHandler<UserEvent> for App {
                 #[cfg(not(target_arch = "wasm32"))]
                 if code == winit::keyboard::KeyCode::KeyU && key_state.is_pressed() {
                     self.open_file_dialog();
+                    return;
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                if code == winit::keyboard::KeyCode::KeyU && key_state.is_pressed() {
+                    if let Some(document) = wgpu::web_sys::window().and_then(|w| w.document()) {
+                        if let Some(element) = document.get_element_by_id("upload-image-input") {
+                            if let Ok(input) = element.dyn_into::<web_sys::HtmlInputElement>() {
+                                input.click();
+                            }
+                        }
+                    }
                     return;
                 }
 

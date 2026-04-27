@@ -72,7 +72,7 @@ Web builds show a minimal browser control bar in the top-left corner.
 ## Notes
 
 - Movement and zoom are continuous while keys are held.
-- On web builds, image upload is not supported yet.
+- On web builds, use the `Upload Image` button in the control bar to load an image board.
 
 ## Screenshots
 
