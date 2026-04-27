@@ -80,9 +80,28 @@ Open the control panel in the top-left corner.
 
 ## Gallery
 
+Circuit:
+
 ![](assets/circuit.png)
+
+Football:
+
 ![](assets/football.png)
+
+Logos:
+
 ![](assets/logos.png)
+
+Matisse:
+
 ![](assets/matisse.png)
+
+Metro:
+
 ![](assets/metro.png)
+
+Gosper:
+
 ![](assets/gosper.png)
+
+To reproduce these simulations, upload the corresponding image in `test/`
