@@ -46,8 +46,8 @@ impl Cells {
         });
 
         let depth_texture = texture::Texture::create_depth_texture(
-            &device,
-            &surface_config,
+            device,
+            surface_config,
             texture::Texture::DEPTH_TEXTURE_LABEL,
         );
 
@@ -56,7 +56,7 @@ impl Cells {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("cells-render-pipeline-layout"),
-                bind_group_layouts: &[Some(&camera_bgl)],
+                bind_group_layouts: &[Some(camera_bgl)],
                 immediate_size: 0,
             });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

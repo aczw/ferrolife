@@ -11,10 +11,10 @@ pub fn float_to_u8(value: f32) -> u32 {
 }
 
 pub fn pack_color(color: Vector4<f32>) -> u32 {
-    let r = float_to_u8(color.x) as u32;
-    let g = float_to_u8(color.y) as u32;
-    let b = float_to_u8(color.z) as u32;
-    let a = float_to_u8(color.w) as u32;
+    let r = float_to_u8(color.x);
+    let g = float_to_u8(color.y);
+    let b = float_to_u8(color.z);
+    let a = float_to_u8(color.w);
 
     r | (g << 8) | (b << 16) | (a << 24)
 }

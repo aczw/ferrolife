@@ -14,7 +14,7 @@ use wasm_bindgen::prelude::*;
 use winit::platform::web::EventLoopExtWebSys;
 use winit::{
     application::ApplicationHandler,
-    event::{KeyEvent, MouseButton, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{EventLoop, EventLoopProxy},
     keyboard::PhysicalKey,
     window::Window,
@@ -252,18 +252,16 @@ impl ApplicationHandler<UserEvent> for App {
                 state.set_cursor_position(position.x as f32, position.y as f32);
             }
             WindowEvent::MouseInput {
-                state: mouse_state,
+                state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
             } => {
-                if mouse_state.is_pressed() {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    if state.should_capture_mouse() {
-                        return;
-                    }
-
-                    state.paint_cell_under_cursor();
+                #[cfg(not(target_arch = "wasm32"))]
+                if state.should_capture_mouse() {
+                    return;
                 }
+
+                state.paint_cell_under_cursor();
             }
             WindowEvent::RedrawRequested => {
                 state.update();
