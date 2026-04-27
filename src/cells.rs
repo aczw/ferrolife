@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::{instance::InstanceRaw, texture, vertex::Vertex};
+use crate::{instance::Instance, texture, vertex::Vertex};
 
 const VERTICES: &[Vertex] = &[
     Vertex {
@@ -66,7 +66,7 @@ impl Cells {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Vertex::buf_layout(), InstanceRaw::buf_layout()],
+                buffers: &[Vertex::buf_layout(), Instance::buf_layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,

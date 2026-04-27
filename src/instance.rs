@@ -1,58 +1,34 @@
-use cgmath::{Matrix4, Vector3, Vector4};
-
-pub struct Instance {
-    pub translation: Vector3<f32>,
-    pub color: Vector4<f32>,
-}
+use cgmath::Vector4;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw {
-    model: [[f32; 4]; 4],
-    color: [f32; 4],
+pub struct Instance {
+    pub color: u32,
+}
+
+pub fn float_to_u8(value: f32) -> u32 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u32
+}
+
+pub fn pack_color(color: Vector4<f32>) -> u32 {
+    let r = float_to_u8(color.x) as u32;
+    let g = float_to_u8(color.y) as u32;
+    let b = float_to_u8(color.z) as u32;
+    let a = float_to_u8(color.w) as u32;
+
+    r | (g << 8) | (b << 16) | (a << 24)
 }
 
 impl Instance {
-    pub fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            model: Matrix4::from_translation(self.translation).into(),
-            color: self.color.into(),
-        }
-    }
-}
-
-impl InstanceRaw {
     pub fn buf_layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<Instance>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 1,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 3,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: std::mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 4,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: std::mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
-                    shader_location: 5,
-                },
-            ],
+            attributes: &[wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Unorm8x4,
+                offset: 0,
+                shader_location: 1,
+            }],
         }
     }
 }

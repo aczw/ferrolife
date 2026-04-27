@@ -1,17 +1,10 @@
 use cgmath::{Vector3, Vector4};
 use wgpu::util::DeviceExt;
 
-use crate::instance::Instance;
+use crate::instance::{Instance, pack_color};
 
 pub const GRID_WIDTH: u32 = 400;
 pub const GRID_HEIGHT: u32 = 300;
-
-/// Recenters the instances at the world space origin.
-const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
-    (GRID_WIDTH - 1) as f32 * 0.5,
-    (GRID_HEIGHT - 1) as f32 * 0.5,
-    0.0,
-);
 
 /// Has to match with the `@workgroup_size` used in the compute shader.
 const WORKGROUP_SIZE: u32 = 16;
@@ -72,8 +65,6 @@ enum CurrentInstanceBuffer {
 }
 
 pub struct Simulation {
-    instances: Vec<Instance>,
-
     current_instance_buf: CurrentInstanceBuffer,
     state_buf_a: wgpu::Buffer,
     state_buf_b: wgpu::Buffer,
@@ -85,24 +76,16 @@ pub struct Simulation {
 
 impl Simulation {
     pub fn new(device: &wgpu::Device) -> Self {
-        let instances = (0..GRID_HEIGHT)
+        let instance_raw_data: Vec<Instance> = (0..GRID_HEIGHT)
             .flat_map(|y| {
                 (0..GRID_WIDTH).map(move |x| {
-                    let x_flt = x as f32;
-                    let y_flt = y as f32;
-
-                    let translation = Vector3 {
-                        x: x_flt,
-                        y: y_flt,
-                        z: 0.0,
-                    } - INSTANCE_DISPLACEMENT;
                     let color = initial_color(x, y);
-
-                    Instance { translation, color }
+                    Instance {
+                        color: pack_color(color),
+                    }
                 })
             })
-            .collect::<Vec<_>>();
-        let instance_raw_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+            .collect();
 
         let state_buf_a = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("simulation-state-buf-a"),
@@ -190,7 +173,6 @@ impl Simulation {
         });
 
         Self {
-            instances,
             current_instance_buf: CurrentInstanceBuffer::A,
             state_buf_a,
             state_buf_b,
@@ -248,7 +230,7 @@ impl Simulation {
     }
 
     pub fn num_instances(&self) -> usize {
-        self.instances.len()
+        (GRID_WIDTH * GRID_HEIGHT) as usize
     }
 
     pub fn current_instance_buf_to_use(&self) -> &wgpu::Buffer {
@@ -275,6 +257,8 @@ impl Simulation {
                 rgba_bytes.len()
             );
         }
+
+        let mut state_data = Vec::with_capacity(self.num_instances());
 
         for y in 0..GRID_HEIGHT {
             for x in 0..GRID_WIDTH {
@@ -304,29 +288,15 @@ impl Simulation {
                     to_channel(rgba_bytes[src_idx + 2]),
                     1.0,
                 );
-                let dst_idx = (y * GRID_WIDTH + x) as usize;
-                self.instances[dst_idx].color = color;
+                state_data.push(Instance {
+                    color: pack_color(color),
+                });
             }
         }
 
-        let instance_raw_data = self
-            .instances
-            .iter()
-            .map(Instance::to_raw)
-            .collect::<Vec<_>>();
-
-        queue.write_buffer(
-            &self.state_buf_a,
-            0,
-            bytemuck::cast_slice(&instance_raw_data),
-        );
-        queue.write_buffer(
-            &self.state_buf_b,
-            0,
-            bytemuck::cast_slice(&instance_raw_data),
-        );
+        queue.write_buffer(&self.state_buf_a, 0, bytemuck::cast_slice(&state_data));
+        queue.write_buffer(&self.state_buf_b, 0, bytemuck::cast_slice(&state_data));
         self.current_instance_buf = CurrentInstanceBuffer::A;
-
         Ok(())
     }
 }

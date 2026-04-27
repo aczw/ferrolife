@@ -7,11 +7,7 @@ struct VertexInput {
 }
 
 struct InstanceInput {
-    @location(1) model_mat_0: vec4f,
-    @location(2) model_mat_1: vec4f,
-    @location(3) model_mat_2: vec4f,
-    @location(4) model_mat_3: vec4f,
-    @location(5) color: vec4f,
+    @location(1) color: vec4f,
 }
 
 struct VertexOutput {
@@ -21,18 +17,22 @@ struct VertexOutput {
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
 
+const GRID_WIDTH: f32 = 400.0;
+const GRID_HEIGHT: f32 = 300.0;
+
 @vertex
-fn vs_main(vert_in: VertexInput, inst_in: InstanceInput) -> VertexOutput {
-    let instance_model = mat4x4f(
-        inst_in.model_mat_0,
-        inst_in.model_mat_1,
-        inst_in.model_mat_2,
-        inst_in.model_mat_3,
-    );
+fn vs_main(
+    vert_in: VertexInput,
+    inst_in: InstanceInput,
+    @builtin(instance_index) instance_index: u32,
+) -> VertexOutput {
+    let x = f32(instance_index % 400u);
+    let y = f32(instance_index / 400u);
+    let translation = vec2f(x - (GRID_WIDTH - 1.0) * 0.5, y - (GRID_HEIGHT - 1.0) * 0.5);
 
     var out: VertexOutput;
     out.color = inst_in.color;
-    out.clip_position = camera.view_proj * instance_model * vec4f(vert_in.position, 1.0);
+    out.clip_position = camera.view_proj * vec4f(vert_in.position.xy + translation, 0.0, 1.0);
     return out;
 }
 

@@ -1,6 +1,5 @@
 struct CellState {
-    model: mat4x4f,
-    color: vec4f,
+    color: u32,
 }
 
 @group(0) @binding(0) var<storage, read> input: array<CellState>;
@@ -26,6 +25,22 @@ fn get_index(id: vec3u) -> u32 {
     return id.y * grid_dims.x + id.x;
 }
 
+fn unpack_color(color: u32) -> vec4f {
+    let r = f32(color & 0xffu) / 255.0;
+    let g = f32((color >> 8u) & 0xffu) / 255.0;
+    let b = f32((color >> 16u) & 0xffu) / 255.0;
+    let a = f32((color >> 24u) & 0xffu) / 255.0;
+    return vec4f(r, g, b, a);
+}
+
+fn pack_color(color: vec4f) -> u32 {
+    let r = u32(round(clamp(color.r, 0.0, 1.0) * 255.0));
+    let g = u32(round(clamp(color.g, 0.0, 1.0) * 255.0));
+    let b = u32(round(clamp(color.b, 0.0, 1.0) * 255.0));
+    let a = u32(round(clamp(color.a, 0.0, 1.0) * 255.0));
+    return r | (g << 8u) | (b << 16u) | (a << 24u);
+}
+
 fn is_alive(color: vec3f) -> bool {
     return max(color.r, max(color.g, color.b)) > alive_threshold;
 }
@@ -44,9 +59,10 @@ fn get_neighbor_state(id: vec3u) -> NeighborState {
         if neighbor.x >= 0 && neighbor.x < i32(grid_dims.x) &&
             neighbor.y >= 0 && neighbor.y < i32(grid_dims.y) {
             let cell = input[get_index(vec3u(neighbor))];
-            if is_alive(cell.color.rgb) {
+            let neighbor_color = unpack_color(cell.color).rgb;
+            if is_alive(neighbor_color) {
                 state.num_alive += 1u;
-                total_color += cell.color.rgb;
+                total_color += neighbor_color;
             }
         }
     }
@@ -81,9 +97,11 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
 
     let index = get_index(id);
     var prev = input[index];
+    let prev_color = unpack_color(prev.color);
 
     let neighbor_state = get_neighbor_state(id);
-    prev.color = vec4(update_color(prev.color.rgb, neighbor_state), 1.0);
+    let next_color = update_color(prev_color.rgb, neighbor_state);
+    prev.color = pack_color(vec4(next_color, 1.0));
 
     output[index] = prev;
 }
