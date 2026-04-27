@@ -219,6 +219,13 @@ impl ApplicationHandler<UserEvent> for App {
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes();
 
+        #[cfg(target_os = "windows")]
+        {
+            use winit::platform::windows::WindowAttributesExtWindows;
+
+            window_attributes = window_attributes.with_drag_and_drop(false);
+        }
+
         #[cfg(target_arch = "wasm32")]
         {
             use winit::platform::web::WindowAttributesExtWebSys;
@@ -305,7 +312,7 @@ impl ApplicationHandler<UserEvent> for App {
                 self.is_file_dialog_open = false;
 
                 if let (Some(state), Some(path)) = (&mut self.state, path) {
-                    state.handle_dropped_file(path);
+                    state.load_board_from_image_file(path);
                 }
             }
         }
@@ -345,8 +352,6 @@ impl ApplicationHandler<UserEvent> for App {
                     state.paint_cell_under_cursor();
                 }
             }
-            #[cfg(not(target_arch = "wasm32"))]
-            WindowEvent::DroppedFile(path) => state.handle_dropped_file(path),
             WindowEvent::RedrawRequested => {
                 state.update();
                 match state.render() {

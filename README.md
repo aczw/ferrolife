@@ -72,7 +72,6 @@ Web builds show a minimal browser control bar in the top-left corner.
 ## Notes
 
 - Movement and zoom are continuous while keys are held.
-- On desktop, you can also drag and drop an image file into the window to load a board.
 - On web builds, image upload is not supported yet.
 
 ## Screenshots

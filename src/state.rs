@@ -459,9 +459,9 @@ impl State {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn handle_dropped_file(&mut self, path: std::path::PathBuf) {
+    pub fn load_board_from_image_file(&mut self, path: std::path::PathBuf) {
         if let Err(err) = self.load_board_from_image_path(&path) {
-            log::error!("failed to load dropped image {}: {err}", path.display());
+            log::error!("failed to load image {}: {err}", path.display());
         }
     }
 
