@@ -1,6 +1,6 @@
 # ferrolife
 
-![Screenshot](assets/screenshot.png)
+![Thumbnail](assets/thumbnail.png)
 
 ## Build and Run
 
@@ -54,28 +54,32 @@ These controls are currently implemented in the app.
 | `Q`                     | Zoom out                                 |
 | `Space`                 | Pause or resume simulation               |
 | `Esc`                   | Exit application                         |
-| `U` (desktop only)      | Open file picker and load an image board |
+| `U`                     | Open file picker and load an image board |
 
 ## UI Controls
 
 ![UI Controls](assets/controls.png)
 
-Desktop shows a controls panel in the top-left corner.
-Web builds show a minimal browser control bar in the top-left corner.
+Open the control panel in the top-left corner.
 
-| Button                   | Action                                                          |
-| ------------------------ | --------------------------------------------------------------- |
-| `Pause/Resume`           | Toggle simulation playback                                      |
-| `Upload Image`           | Open file picker and load image as initial board (desktop only) |
-| `Alive Threshold` slider | Set alive detection threshold (`0.0` to `1.0`, default `0.3`)   |
+| Control                  | Action                                                            |
+| ------------------------ | ----------------------------------------------------------------- |
+| `Pause/Resume`           | Toggle simulation playback                                        |
+| `Upload Image`           | Open file picker and load image as initial board                  |
+| `Clear Board`            | Set all cells to black                                            |
+| `Alive Threshold` slider | Set alive detection threshold (`0.0` to `1.0`, default `0.3`)     |
+| `Live Cell Color` picker | Choose the paint color used when activating cells (default white) |
 
-## Notes
+### Mouse Interaction
 
-- Movement and zoom are continuous while keys are held.
-- On web builds, use the `Upload Image` button in the control bar to load an image board.
+| Input      | Action                                                          |
+| ---------- | --------------------------------------------------------------- |
+| Left click | Set the clicked cell alive using the selected `Live Cell Color` |
 
-## Screenshots
+## Gallery
 
+![](assets/circuit.png)
 ![](assets/football.png)
-![](assets/starry.png)
-![](assets/nighthawks.png)
+![](assets/logos.png)
+![](assets/matisse.png)
+![](assets/metro.png)

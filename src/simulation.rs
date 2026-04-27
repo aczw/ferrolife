@@ -10,7 +10,7 @@ pub const GRID_HEIGHT: u32 = 300;
 const WORKGROUP_SIZE: u32 = 16;
 const NUM_WORKGROUPS_X: u32 = GRID_WIDTH.div_ceil(WORKGROUP_SIZE);
 const NUM_WORKGROUPS_Y: u32 = GRID_HEIGHT.div_ceil(WORKGROUP_SIZE);
-const INITIAL_LIVE_DENSITY: f32 = 0.30;
+const INITIAL_LIVE_DENSITY: f32 = 0.20;
 const DEFAULT_ALIVE_THRESHOLD: f32 = 0.30;
 
 fn hash01(x: u32, y: u32, seed: u32) -> f32 {
