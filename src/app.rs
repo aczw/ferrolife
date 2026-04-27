@@ -34,20 +34,22 @@ pub enum UserEvent {
     #[cfg(target_arch = "wasm32")]
     SetAliveThreshold(f32),
     #[cfg(target_arch = "wasm32")]
-    SetLiveCellColor([f32; 3]),
+    SetCellColor([f32; 3]),
     #[cfg(target_arch = "wasm32")]
     ClearBoard,
     #[cfg(target_arch = "wasm32")]
     LoadImageBytes(Vec<u8>),
     #[cfg(not(target_arch = "wasm32"))]
-    FileDialogResult(Option<PathBuf>),
+    OpenImageDialogResult(Option<PathBuf>),
+    #[cfg(not(target_arch = "wasm32"))]
+    SaveImageDialogResult(Option<PathBuf>),
 }
 
 pub struct App {
     proxy: EventLoopProxy<UserEvent>,
     state: Option<State>,
     #[cfg(not(target_arch = "wasm32"))]
-    is_file_dialog_open: bool,
+    is_dialog_open: bool,
     #[cfg(target_arch = "wasm32")]
     web_controls: Option<WebControls>,
 }
@@ -59,19 +61,19 @@ impl App {
             state: None,
             proxy,
             #[cfg(not(target_arch = "wasm32"))]
-            is_file_dialog_open: false,
+            is_dialog_open: false,
             #[cfg(target_arch = "wasm32")]
             web_controls: None,
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn open_file_dialog(&mut self) {
-        if self.is_file_dialog_open {
+    fn open_image_file_dialog(&mut self) {
+        if self.is_dialog_open {
             return;
         }
 
-        self.is_file_dialog_open = true;
+        self.is_dialog_open = true;
         let proxy = self.proxy.clone();
 
         // Need to run file dialog in a separate thread to avoid stalling the UI
@@ -80,7 +82,26 @@ impl App {
                 .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif", "webp"])
                 .pick_file();
 
-            let _ = proxy.send_event(UserEvent::FileDialogResult(selected));
+            let _ = proxy.send_event(UserEvent::OpenImageDialogResult(selected));
+        });
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_save_image_dialog(&mut self) {
+        if self.is_dialog_open {
+            return;
+        }
+
+        self.is_dialog_open = true;
+        let proxy = self.proxy.clone();
+
+        std::thread::spawn(move || {
+            let selected = rfd::FileDialog::new()
+                .add_filter("PNG Image", &["png"])
+                .set_file_name("board.png")
+                .save_file();
+
+            let _ = proxy.send_event(UserEvent::SaveImageDialogResult(selected));
         });
     }
 
@@ -172,9 +193,9 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             #[cfg(target_arch = "wasm32")]
-            UserEvent::SetLiveCellColor(color) => {
+            UserEvent::SetCellColor(color) => {
                 if let Some(state) = &mut self.state {
-                    state.set_live_cell_color(color);
+                    state.set_cell_color(color);
                 }
             }
             #[cfg(target_arch = "wasm32")]
@@ -192,11 +213,19 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             #[cfg(not(target_arch = "wasm32"))]
-            UserEvent::FileDialogResult(path) => {
-                self.is_file_dialog_open = false;
+            UserEvent::OpenImageDialogResult(path) => {
+                self.is_dialog_open = false;
 
                 if let (Some(state), Some(path)) = (&mut self.state, path) {
                     state.load_board_from_image_file(path);
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            UserEvent::SaveImageDialogResult(path) => {
+                self.is_dialog_open = false;
+
+                if let (Some(state), Some(path)) = (&self.state, path) {
+                    state.save_board_to_image_file(path);
                 }
             }
         }
@@ -244,7 +273,8 @@ impl ApplicationHandler<UserEvent> for App {
                         #[cfg(not(target_arch = "wasm32"))]
                         if let Some(action) = state.take_ui_action() {
                             match action {
-                                UiAction::OpenImageDialog => self.open_file_dialog(),
+                                UiAction::OpenImageDialog => self.open_image_file_dialog(),
+                                UiAction::SaveImageDialog => self.open_save_image_dialog(),
                             }
                         }
                     }
@@ -265,7 +295,13 @@ impl ApplicationHandler<UserEvent> for App {
             } => {
                 #[cfg(not(target_arch = "wasm32"))]
                 if code == winit::keyboard::KeyCode::KeyU && key_state.is_pressed() {
-                    self.open_file_dialog();
+                    self.open_image_file_dialog();
+                    return;
+                }
+
+                #[cfg(not(target_arch = "wasm32"))]
+                if code == winit::keyboard::KeyCode::KeyB && key_state.is_pressed() {
+                    self.open_save_image_dialog();
                     return;
                 }
 

@@ -13,7 +13,7 @@ pub(super) struct WebControls {
     _upload_input_change: Closure<dyn FnMut(web_sys::Event)>,
     _upload_input: web_sys::HtmlInputElement,
     _alive_threshold_input: Closure<dyn FnMut(web_sys::Event)>,
-    _live_color_input: Closure<dyn FnMut(web_sys::Event)>,
+    _cell_color_input: Closure<dyn FnMut(web_sys::Event)>,
     _clear_board_click: Closure<dyn FnMut(web_sys::Event)>,
 }
 
@@ -79,15 +79,15 @@ pub(super) fn ensure_web_controls(
     alive_slider.set_value("0.30");
     alive_slider.set_attribute("style", "width:140px;")?;
 
-    let live_color_label = document.create_element("span")?;
-    live_color_label.set_text_content(Some("Live Color"));
-    live_color_label.set_attribute("style", "color:#f5f5f5;font:500 12px sans-serif;")?;
+    let cell_color_label = document.create_element("span")?;
+    cell_color_label.set_text_content(Some("Cell Color"));
+    cell_color_label.set_attribute("style", "color:#f5f5f5;font:500 12px sans-serif;")?;
 
-    let live_color_input: web_sys::HtmlInputElement =
+    let cell_color_input: web_sys::HtmlInputElement =
         document.create_element("input")?.dyn_into()?;
-    live_color_input.set_type("color");
-    live_color_input.set_value("#ffffff");
-    live_color_input.set_attribute("style", "width:40px;height:28px;padding:0;border:0;")?;
+    cell_color_input.set_type("color");
+    cell_color_input.set_value("#ffffff");
+    cell_color_input.set_attribute("style", "width:40px;height:28px;padding:0;border:0;")?;
 
     let clear_board_button = document.create_element("button")?;
     clear_board_button.set_text_content(Some("Clear Board"));
@@ -100,8 +100,8 @@ pub(super) fn ensure_web_controls(
     container.append_child(&upload_image_button)?;
     container.append_child(&alive_label)?;
     container.append_child(&alive_slider)?;
-    container.append_child(&live_color_label)?;
-    container.append_child(&live_color_input)?;
+    container.append_child(&cell_color_label)?;
+    container.append_child(&cell_color_input)?;
     container.append_child(&clear_board_button)?;
     body.append_child(&container)?;
     body.append_child(&upload_input)?;
@@ -155,19 +155,21 @@ pub(super) fn ensure_web_controls(
             .clamp(0.0, 1.0);
         let _ = threshold_proxy.send_event(UserEvent::SetAliveThreshold(parsed));
     }) as Box<dyn FnMut(_)>);
-    alive_slider
-        .add_event_listener_with_callback("input", alive_threshold_input.as_ref().unchecked_ref())?;
+    alive_slider.add_event_listener_with_callback(
+        "input",
+        alive_threshold_input.as_ref().unchecked_ref(),
+    )?;
 
     let color_proxy = proxy.clone();
-    let live_color_input_for_event = live_color_input.clone();
-    let live_color_input_for_callback = live_color_input.clone();
-    let live_color_input = Closure::wrap(Box::new(move |_event: web_sys::Event| {
-        if let Some(color) = parse_html_hex_color(&live_color_input_for_callback.value()) {
-            let _ = color_proxy.send_event(UserEvent::SetLiveCellColor(color));
+    let cell_color_input_for_event = cell_color_input.clone();
+    let cell_color_input_for_callback = cell_color_input.clone();
+    let cell_color_input = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+        if let Some(color) = parse_html_hex_color(&cell_color_input_for_callback.value()) {
+            let _ = color_proxy.send_event(UserEvent::SetCellColor(color));
         }
     }) as Box<dyn FnMut(_)>);
-    live_color_input_for_event
-        .add_event_listener_with_callback("input", live_color_input.as_ref().unchecked_ref())?;
+    cell_color_input_for_event
+        .add_event_listener_with_callback("input", cell_color_input.as_ref().unchecked_ref())?;
 
     let clear_proxy = proxy.clone();
     let clear_board_click = Closure::wrap(Box::new(move |_event: web_sys::Event| {
@@ -183,7 +185,7 @@ pub(super) fn ensure_web_controls(
         _upload_input_change: upload_input_change,
         _upload_input: upload_input,
         _alive_threshold_input: alive_threshold_input,
-        _live_color_input: live_color_input,
+        _cell_color_input: cell_color_input,
         _clear_board_click: clear_board_click,
     });
 

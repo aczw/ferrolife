@@ -9,6 +9,7 @@ use super::State;
 
 pub enum UiAction {
     OpenImageDialog,
+    SaveImageDialog,
 }
 
 pub(super) struct UiLayer {
@@ -79,12 +80,8 @@ pub(super) fn record_ui(
     let mut reset_elapsed = false;
     let mut alive_threshold = state.simulation.alive_threshold();
     let mut update_alive_threshold = false;
-    let mut live_cell_color = [
-        state.live_cell_color.x,
-        state.live_cell_color.y,
-        state.live_cell_color.z,
-    ];
-    let mut update_live_cell_color = false;
+    let mut cell_color = [state.cell_color.x, state.cell_color.y, state.cell_color.z];
+    let mut update_cell_color = false;
     let mut clear_board = false;
     {
         let ui = state.ui_layer.imgui.frame();
@@ -95,15 +92,22 @@ pub(super) fn record_ui(
             .resizable(false)
             .always_auto_resize(true)
             .build(|| {
-                let pause_label = if is_paused { "Resume" } else { "Pause" };
+                let pause_label = if is_paused { "Resume" } else { "Pause " };
                 if ui.button(pause_label) {
                     is_paused = !is_paused;
                     reset_elapsed = true;
                 }
+                ui.same_line();
 
                 if ui.button("Upload Image") {
                     requested_action = Some(UiAction::OpenImageDialog);
                 }
+                ui.same_line();
+
+                if ui.button("Save Board") {
+                    requested_action = Some(UiAction::SaveImageDialog);
+                }
+                ui.same_line();
 
                 if ui.button("Clear Board") {
                     clear_board = true;
@@ -113,8 +117,8 @@ pub(super) fn record_ui(
                     update_alive_threshold = true;
                 }
 
-                if ui.color_edit3("Live Cell Color", &mut live_cell_color) {
-                    update_live_cell_color = true;
+                if ui.color_edit3("Cell Color", &mut cell_color) {
+                    update_cell_color = true;
                 }
             });
 
@@ -127,8 +131,8 @@ pub(super) fn record_ui(
     if update_alive_threshold {
         state.set_alive_threshold(alive_threshold);
     }
-    if update_live_cell_color {
-        state.set_live_cell_color(live_cell_color);
+    if update_cell_color {
+        state.set_cell_color(cell_color);
     }
     if clear_board {
         state.clear_board();

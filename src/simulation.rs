@@ -95,6 +95,7 @@ impl Simulation {
             contents: bytemuck::cast_slice(&instance_raw_data),
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         });
         let state_buf_b = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -102,6 +103,7 @@ impl Simulation {
             contents: bytemuck::cast_slice(&instance_raw_data),
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -369,5 +371,56 @@ impl Simulation {
         queue.write_buffer(&self.state_buf_b, 0, bytemuck::cast_slice(&state_data));
         self.current_instance_buf = CurrentInstanceBuffer::A;
         Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn read_current_instances(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> anyhow::Result<Vec<Instance>> {
+        let instance_size = std::mem::size_of::<Instance>() as u64;
+        let byte_len = self.num_instances() as u64 * instance_size;
+
+        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("simulation-readback-staging-buffer"),
+            size: byte_len,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("simulation-readback-encoder"),
+        });
+        encoder.copy_buffer_to_buffer(
+            self.current_instance_buf_to_use(),
+            0,
+            &staging_buffer,
+            0,
+            byte_len,
+        );
+        queue.submit(std::iter::once(encoder.finish()));
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        staging_buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                let _ = tx.send(result);
+            });
+
+        device.poll(wgpu::PollType::wait_indefinitely())?;
+        rx.recv()
+            .map_err(|err| anyhow::anyhow!("failed to receive map_async callback: {err}"))??;
+
+        let mapped = staging_buffer.slice(..).get_mapped_range();
+        let mut instances = Vec::with_capacity(self.num_instances());
+        for chunk in mapped.chunks_exact(instance_size as usize) {
+            let color = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            instances.push(Instance { color });
+        }
+        drop(mapped);
+        staging_buffer.unmap();
+
+        Ok(instances)
     }
 }

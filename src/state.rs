@@ -7,6 +7,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use cgmath::Vector4;
+#[cfg(not(target_arch = "wasm32"))]
+use image::ImageEncoder;
 use web_time::Instant;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
@@ -62,7 +64,7 @@ pub struct State {
     previous_instant: Instant,
     elapsed: f32,
     is_paused: bool,
-    live_cell_color: Vector4<f32>,
+    cell_color: Vector4<f32>,
     cursor_pos: Option<(f32, f32)>,
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -189,7 +191,7 @@ impl State {
             previous_instant: Instant::now(),
             elapsed: 0.0,
             is_paused: false,
-            live_cell_color: Vector4::new(1.0, 1.0, 1.0, 1.0),
+            cell_color: Vector4::new(1.0, 1.0, 1.0, 1.0),
             cursor_pos: None,
 
             #[cfg(not(target_arch = "wasm32"))]
@@ -324,8 +326,8 @@ impl State {
             .set_alive_threshold(&self.queue, alive_threshold);
     }
 
-    pub fn set_live_cell_color(&mut self, color: [f32; 3]) {
-        self.live_cell_color = Vector4::new(
+    pub fn set_cell_color(&mut self, color: [f32; 3]) {
+        self.cell_color = Vector4::new(
             color[0].clamp(0.0, 1.0),
             color[1].clamp(0.0, 1.0),
             color[2].clamp(0.0, 1.0),
@@ -369,7 +371,7 @@ impl State {
                     &self.queue,
                     grid_x as u32,
                     grid_y as u32,
-                    self.live_cell_color,
+                    self.cell_color,
                 );
             }
         }
@@ -390,6 +392,64 @@ impl State {
         self.is_paused = true;
         self.elapsed = 0.0;
         Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn save_board_to_png_path(&self, path: &Path) -> anyhow::Result<()> {
+        let png_bytes = self.encode_board_to_png_bytes()?;
+        std::fs::write(path, png_bytes)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn encode_board_to_png_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        let instances = self
+            .simulation
+            .read_current_instances(&self.device, &self.queue)?;
+        let mut image = image::RgbaImage::new(GRID_WIDTH, GRID_HEIGHT);
+
+        // See: https://en.wikipedia.org/wiki/SRGB#Transfer_function_(%22gamma%22)
+        let linear_to_srgb_u8 = |linear: f32| -> u8 {
+            let srgb = if linear <= 0.003_130_8 {
+                12.92 * linear
+            } else {
+                1.055 * linear.powf(1.0 / 2.4) - 0.055
+            };
+            (srgb.clamp(0.0, 1.0) * 255.0).round() as u8
+        };
+
+        for y in 0..GRID_HEIGHT {
+            for x in 0..GRID_WIDTH {
+                let idx = (y * GRID_WIDTH + x) as usize;
+                let packed = instances[idx].color;
+
+                let r = (packed & 0xFF) as u8;
+                let g = ((packed >> 8) & 0xFF) as u8;
+                let b = ((packed >> 16) & 0xFF) as u8;
+
+                let dst_y = GRID_HEIGHT - 1 - y;
+                image.put_pixel(
+                    x,
+                    dst_y,
+                    image::Rgba([
+                        linear_to_srgb_u8(r as f32 / 255.0),
+                        linear_to_srgb_u8(g as f32 / 255.0),
+                        linear_to_srgb_u8(b as f32 / 255.0),
+                        255,
+                    ]),
+                );
+            }
+        }
+
+        let mut png_bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png_bytes).write_image(
+            image.as_raw(),
+            GRID_WIDTH,
+            GRID_HEIGHT,
+            image::ColorType::Rgba8.into(),
+        )?;
+
+        Ok(png_bytes)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -426,6 +486,13 @@ impl State {
     pub fn load_board_from_image_file(&mut self, path: std::path::PathBuf) {
         if let Err(err) = self.load_board_from_image_path(&path) {
             log::error!("failed to load image {}: {err}", path.display());
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn save_board_to_image_file(&self, path: std::path::PathBuf) {
+        if let Err(err) = self.save_board_to_png_path(&path) {
+            log::error!("failed to save board image {}: {err}", path.display());
         }
     }
 

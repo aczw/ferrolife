@@ -43,18 +43,19 @@ wasm-pack build --target web
 
 These controls are currently implemented in the app.
 
-| Key(s)                  | Action                                   |
-| ----------------------- | ---------------------------------------- |
-| `W` / `Arrow Up`        | Pan camera up                            |
-| `A` / `Arrow Left`      | Pan camera left                          |
-| `S` / `Arrow Down`      | Pan camera down                          |
-| `D` / `Arrow Right`     | Pan camera right                         |
-| `Shift` + movement keys | Increase camera pan speed while held     |
-| `E`                     | Zoom in                                  |
-| `Q`                     | Zoom out                                 |
-| `Space`                 | Pause or resume simulation               |
-| `Esc`                   | Exit application                         |
-| `U`                     | Open file picker and load an image board |
+| Key(s)                  | Action                                         |
+| ----------------------- | ---------------------------------------------- |
+| `W` / `Arrow Up`        | Pan camera up                                  |
+| `A` / `Arrow Left`      | Pan camera left                                |
+| `S` / `Arrow Down`      | Pan camera down                                |
+| `D` / `Arrow Right`     | Pan camera right                               |
+| `Shift` + movement keys | Increase camera pan speed while held           |
+| `E`                     | Zoom in                                        |
+| `Q`                     | Zoom out                                       |
+| `Space`                 | Pause or resume simulation                     |
+| `Esc`                   | Exit application                               |
+| `U`                     | Open file picker and load an image board       |
+| `B`                     | Save current board as PNG image (desktop only) |
 
 ## UI Controls
 
@@ -66,9 +67,10 @@ Open the control panel in the top-left corner.
 | ------------------------ | ----------------------------------------------------------------- |
 | `Pause/Resume`           | Toggle simulation playback                                        |
 | `Upload Image`           | Open file picker and load image as initial board                  |
+| `Save Board`             | Save the current board as a PNG image (desktop only)              |
 | `Clear Board`            | Set all cells to black                                            |
 | `Alive Threshold` slider | Set alive detection threshold (`0.0` to `1.0`, default `0.3`)     |
-| `Live Cell Color` picker | Choose the paint color used when activating cells (default white) |
+| `Cell Color` picker      | Choose the paint color used when activating cells (default white) |
 
 ### Mouse Interaction
 
@@ -83,3 +85,4 @@ Open the control panel in the top-left corner.
 ![](assets/logos.png)
 ![](assets/matisse.png)
 ![](assets/metro.png)
+![](assets/gosper.png)
