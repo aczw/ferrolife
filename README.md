@@ -2,6 +2,8 @@
 
 ![Thumbnail](assets/thumbnail.png)
 
+Live site: [ferrolife.czw.sh](https://ferrolife.czw.sh/)
+
 ## Build and Run
 
 ### Desktop
