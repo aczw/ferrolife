@@ -36,7 +36,7 @@ pub(super) fn create_ui_layer(
     }]);
 
     let mut platform = WinitPlatform::new(&mut imgui);
-    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Rounded);
+    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
 
     let renderer_config = RendererConfig {
         texture_format: surface_format,
@@ -64,17 +64,6 @@ pub(super) fn record_ui(
         .ui_layer
         .platform
         .prepare_frame(state.ui_layer.imgui.io_mut(), &state.window)?;
-
-    // Keep ImGui clip/scissor conversion aligned with the actual swapchain size.
-    let window_size = state.window.inner_size();
-    if window_size.width > 0 && window_size.height > 0 {
-        let io = state.ui_layer.imgui.io_mut();
-        io.display_size = [window_size.width as f32, window_size.height as f32];
-        io.display_framebuffer_scale = [
-            state.surface.config.width as f32 / window_size.width as f32,
-            state.surface.config.height as f32 / window_size.height as f32,
-        ];
-    }
 
     let mut is_paused = state.is_paused;
     let mut reset_elapsed = false;
