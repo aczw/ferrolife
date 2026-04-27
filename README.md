@@ -1,5 +1,7 @@
 # ferrolife
 
+![Screenshot](assets/screenshot.png)
+
 ## Build and Run
 
 ### Desktop
@@ -56,7 +58,9 @@ These controls are currently implemented in the app.
 
 ## UI Controls
 
-Desktop shows an ImGui controls panel in the top-left corner.
+![UI Controls](assets/controls.png)
+
+Desktop shows a controls panel in the top-left corner.
 Web builds show a minimal browser control bar in the top-left corner.
 
 | Button                   | Action                                                          |
@@ -70,3 +74,9 @@ Web builds show a minimal browser control bar in the top-left corner.
 - Movement and zoom are continuous while keys are held.
 - On desktop, you can also drag and drop an image file into the window to load a board.
 - On web builds, image upload is not supported yet.
+
+## Screenshots
+
+![](assets/football.png)
+![](assets/starry.png)
+![](assets/nighthawks.png)
