@@ -326,6 +326,15 @@ impl State {
             .set_alive_threshold(&self.queue, alive_threshold);
     }
 
+    pub fn set_born_rules(&mut self, born_rules: u16) {
+        self.simulation.set_born_rules(&self.queue, born_rules);
+    }
+
+    pub fn set_survive_rules(&mut self, survive_rules: u16) {
+        self.simulation
+            .set_survive_rules(&self.queue, survive_rules);
+    }
+
     pub fn set_cell_color(&mut self, color: [f32; 3]) {
         self.cell_color = Vector4::new(
             color[0].clamp(0.0, 1.0),

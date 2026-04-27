@@ -1,3 +1,5 @@
+use std::cell::Cell;
+use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
@@ -15,6 +17,8 @@ pub(super) struct WebControls {
     _alive_threshold_input: Closure<dyn FnMut(web_sys::Event)>,
     _cell_color_input: Closure<dyn FnMut(web_sys::Event)>,
     _clear_board_click: Closure<dyn FnMut(web_sys::Event)>,
+    _born_rule_closures: Vec<Closure<dyn FnMut(web_sys::Event)>>,
+    _survive_rule_closures: Vec<Closure<dyn FnMut(web_sys::Event)>>,
 }
 
 fn parse_html_hex_color(value: &str) -> Option<[f32; 3]> {
@@ -95,6 +99,45 @@ pub(super) fn ensure_web_controls(
         "style",
         "border:0;border-radius:6px;padding:6px 10px;cursor:pointer;background:#f0f0f0;color:#1f1f1f;font:600 13px sans-serif;",
     )?;
+
+    let born_rules = Rc::new(Cell::new(0b0_0000_1000u16));
+    let survive_rules = Rc::new(Cell::new(0b0_0000_1100u16));
+
+    // Born and Survive rules sections (in a separate container to allow wrapping)
+    let rules_container = document.create_element("div")?;
+    rules_container.set_attribute(
+        "style",
+        "position:fixed;top:90px;left:12px;z-index:50;display:flex;flex-direction:column;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(24,24,24,0.68);backdrop-filter:blur(2px);max-width:600px;",
+    )?;
+
+    let born_label = document.create_element("div")?;
+    born_label.set_text_content(Some("Born Rules (B):"));
+    born_label.set_attribute(
+        "style",
+        "color:#f5f5f5;font:500 12px sans-serif;margin-bottom:4px;",
+    )?;
+    rules_container.append_child(&born_label)?;
+
+    let born_row = document.create_element("div")?;
+    born_row.set_attribute(
+        "style",
+        "display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;",
+    )?;
+    rules_container.append_child(&born_row)?;
+
+    let survive_label = document.create_element("div")?;
+    survive_label.set_text_content(Some("Survive Rules (S):"));
+    survive_label.set_attribute(
+        "style",
+        "color:#f5f5f5;font:500 12px sans-serif;margin-bottom:4px;margin-top:8px;",
+    )?;
+    rules_container.append_child(&survive_label)?;
+
+    let survive_row = document.create_element("div")?;
+    survive_row.set_attribute("style", "display:flex;gap:8px;flex-wrap:wrap;")?;
+    rules_container.append_child(&survive_row)?;
+
+    body.append_child(&rules_container)?;
 
     container.append_child(&pause_button)?;
     container.append_child(&upload_image_button)?;
@@ -178,6 +221,84 @@ pub(super) fn ensure_web_controls(
     clear_board_button
         .add_event_listener_with_callback("click", clear_board_click.as_ref().unchecked_ref())?;
 
+    // Create born rule checkboxes
+    let mut born_rule_closures = Vec::new();
+    for i in 0..9 {
+        let checkbox: web_sys::HtmlInputElement = document.create_element("input")?.dyn_into()?;
+        checkbox.set_type("checkbox");
+        checkbox.set_id(&format!("born-rule-{}", i));
+        checkbox.set_attribute("style", "cursor:pointer;width:18px;height:18px;")?;
+        checkbox.set_checked((born_rules.get() & (1u16 << i)) != 0);
+
+        let checkbox_label = document.create_element("label")?;
+        checkbox_label.set_text_content(Some(&i.to_string()));
+        checkbox_label.set_attribute("for", &format!("born-rule-{}", i))?;
+        checkbox_label.set_attribute("style", "color:#f5f5f5;font:500 11px sans-serif;cursor:pointer;margin-left:3px;margin-right:6px;")?;
+
+        let rule_proxy = proxy.clone();
+        let born_rules = born_rules.clone();
+        let checkbox_for_event = checkbox.clone();
+        let index = i;
+        let born_rule_closure = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            let bit_mask = 1u16 << index;
+            let mut rules = born_rules.get();
+            if checkbox_for_event.checked() {
+                rules |= bit_mask;
+            } else {
+                rules &= !bit_mask;
+            }
+            born_rules.set(rules);
+            let _ = rule_proxy.send_event(UserEvent::SetBornRules(rules));
+        }) as Box<dyn FnMut(_)>);
+        checkbox.add_event_listener_with_callback(
+            "change",
+            born_rule_closure.as_ref().unchecked_ref(),
+        )?;
+
+        born_row.append_child(&checkbox)?;
+        born_row.append_child(&checkbox_label)?;
+        born_rule_closures.push(born_rule_closure);
+    }
+
+    // Create survive rule checkboxes
+    let mut survive_rule_closures = Vec::new();
+    for i in 0..9 {
+        let checkbox: web_sys::HtmlInputElement = document.create_element("input")?.dyn_into()?;
+        checkbox.set_type("checkbox");
+        checkbox.set_id(&format!("survive-rule-{}", i));
+        checkbox.set_attribute("style", "cursor:pointer;width:18px;height:18px;")?;
+        checkbox.set_checked((survive_rules.get() & (1u16 << i)) != 0);
+
+        let checkbox_label = document.create_element("label")?;
+        checkbox_label.set_text_content(Some(&i.to_string()));
+        checkbox_label.set_attribute("for", &format!("survive-rule-{}", i))?;
+        checkbox_label.set_attribute("style", "color:#f5f5f5;font:500 11px sans-serif;cursor:pointer;margin-left:3px;margin-right:6px;")?;
+
+        let rule_proxy = proxy.clone();
+        let survive_rules = survive_rules.clone();
+        let checkbox_for_event = checkbox.clone();
+        let index = i;
+        let survive_rule_closure = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            let bit_mask = 1u16 << index;
+            let mut rules = survive_rules.get();
+            if checkbox_for_event.checked() {
+                rules |= bit_mask;
+            } else {
+                rules &= !bit_mask;
+            }
+            survive_rules.set(rules);
+            let _ = rule_proxy.send_event(UserEvent::SetSurviveRules(rules));
+        }) as Box<dyn FnMut(_)>);
+        checkbox.add_event_listener_with_callback(
+            "change",
+            survive_rule_closure.as_ref().unchecked_ref(),
+        )?;
+
+        survive_row.append_child(&checkbox)?;
+        survive_row.append_child(&checkbox_label)?;
+        survive_rule_closures.push(survive_rule_closure);
+    }
+
     *controls = Some(WebControls {
         _container: container,
         _pause_click: pause_click,
@@ -187,6 +308,8 @@ pub(super) fn ensure_web_controls(
         _alive_threshold_input: alive_threshold_input,
         _cell_color_input: cell_color_input,
         _clear_board_click: clear_board_click,
+        _born_rule_closures: born_rule_closures,
+        _survive_rule_closures: survive_rule_closures,
     });
 
     Ok(())

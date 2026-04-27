@@ -75,19 +75,21 @@ fn get_neighbor_state(id: vec3u) -> NeighborState {
 }
 
 fn update_color(prev_color: vec3f, state: NeighborState) -> vec3f {
+    let born_rules = u32(simulation_params.y);
+    let survive_rules = u32(simulation_params.z);
+
     if is_alive(prev_color) {
-        if state.num_alive == 2u || state.num_alive == 3u {
+        if ((survive_rules >> state.num_alive) & 1u) != 0u {
             return prev_color * (1.0 - neighbor_blend) + state.avg_color * neighbor_blend;
         }
         return vec3f(0.0);
     }
 
-    if state.num_alive == 3u {
+    if ((born_rules >> state.num_alive) & 1u) != 0u {
         return state.avg_color;
     }
     return vec3f(0.0);
 }
-
 @compute
 @workgroup_size(16, 16, 1)
 fn cs_main(@builtin(global_invocation_id) id: vec3u) {

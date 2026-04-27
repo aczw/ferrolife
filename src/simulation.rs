@@ -12,6 +12,8 @@ const NUM_WORKGROUPS_X: u32 = GRID_WIDTH.div_ceil(WORKGROUP_SIZE);
 const NUM_WORKGROUPS_Y: u32 = GRID_HEIGHT.div_ceil(WORKGROUP_SIZE);
 const INITIAL_LIVE_DENSITY: f32 = 0.20;
 const DEFAULT_ALIVE_THRESHOLD: f32 = 0.30;
+const DEFAULT_BORN_RULES: u16 = 0b0000_1000;
+const DEFAULT_SURVIVE_RULES: u16 = 0b0000_1100;
 
 fn hash01(x: u32, y: u32, seed: u32) -> f32 {
     let mut h = x.wrapping_mul(0x9E37_79B9) ^ y.wrapping_mul(0x85EB_CA6B) ^ seed;
@@ -74,6 +76,8 @@ pub struct Simulation {
     grid_dims_bg: wgpu::BindGroup,
     simulation_params_buf: wgpu::Buffer,
     alive_threshold: f32,
+    born_rules: u16,
+    survive_rules: u16,
     pipeline: wgpu::ComputePipeline,
 }
 
@@ -115,7 +119,12 @@ impl Simulation {
 
         let simulation_params_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("simulation-params-unif-buf"),
-            contents: bytemuck::cast_slice(&[[DEFAULT_ALIVE_THRESHOLD, 0.0, 0.0, 0.0]]),
+            contents: bytemuck::cast_slice(&[[
+                DEFAULT_ALIVE_THRESHOLD,
+                DEFAULT_BORN_RULES as f32,
+                DEFAULT_SURVIVE_RULES as f32,
+                0.0,
+            ]]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -210,6 +219,8 @@ impl Simulation {
             grid_dims_bg,
             simulation_params_buf,
             alive_threshold: DEFAULT_ALIVE_THRESHOLD,
+            born_rules: DEFAULT_BORN_RULES,
+            survive_rules: DEFAULT_SURVIVE_RULES,
             pipeline: compute_pipeline,
         }
     }
@@ -307,10 +318,39 @@ impl Simulation {
 
     pub fn set_alive_threshold(&mut self, queue: &wgpu::Queue, alive_threshold: f32) {
         self.alive_threshold = alive_threshold.clamp(0.0, 1.0);
+        self.write_simulation_params(queue);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn born_rules(&self) -> u16 {
+        self.born_rules
+    }
+
+    pub fn set_born_rules(&mut self, queue: &wgpu::Queue, born_rules: u16) {
+        self.born_rules = born_rules;
+        self.write_simulation_params(queue);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn survive_rules(&self) -> u16 {
+        self.survive_rules
+    }
+
+    pub fn set_survive_rules(&mut self, queue: &wgpu::Queue, survive_rules: u16) {
+        self.survive_rules = survive_rules;
+        self.write_simulation_params(queue);
+    }
+
+    fn write_simulation_params(&self, queue: &wgpu::Queue) {
         queue.write_buffer(
             &self.simulation_params_buf,
             0,
-            bytemuck::cast_slice(&[[self.alive_threshold, 0.0, 0.0, 0.0]]),
+            bytemuck::cast_slice(&[[
+                self.alive_threshold,
+                self.born_rules as f32,
+                self.survive_rules as f32,
+                0.0,
+            ]]),
         );
     }
 

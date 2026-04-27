@@ -36,6 +36,10 @@ pub enum UserEvent {
     #[cfg(target_arch = "wasm32")]
     SetCellColor([f32; 3]),
     #[cfg(target_arch = "wasm32")]
+    SetBornRules(u16),
+    #[cfg(target_arch = "wasm32")]
+    SetSurviveRules(u16),
+    #[cfg(target_arch = "wasm32")]
     ClearBoard,
     #[cfg(target_arch = "wasm32")]
     LoadImageBytes(Vec<u8>),
@@ -196,6 +200,18 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::SetCellColor(color) => {
                 if let Some(state) = &mut self.state {
                     state.set_cell_color(color);
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::SetBornRules(born_rules) => {
+                if let Some(state) = &mut self.state {
+                    state.set_born_rules(born_rules);
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::SetSurviveRules(survive_rules) => {
+                if let Some(state) = &mut self.state {
+                    state.set_survive_rules(survive_rules);
                 }
             }
             #[cfg(target_arch = "wasm32")]

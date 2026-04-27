@@ -36,7 +36,7 @@ pub(super) fn create_ui_layer(
     }]);
 
     let mut platform = WinitPlatform::new(&mut imgui);
-    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Rounded);
+    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
 
     let renderer_config = RendererConfig {
         texture_format: surface_format,
@@ -65,17 +65,6 @@ pub(super) fn record_ui(
         .platform
         .prepare_frame(state.ui_layer.imgui.io_mut(), &state.window)?;
 
-    // Keep ImGui clip/scissor conversion aligned with the actual swapchain size.
-    let window_size = state.window.inner_size();
-    if window_size.width > 0 && window_size.height > 0 {
-        let io = state.ui_layer.imgui.io_mut();
-        io.display_size = [window_size.width as f32, window_size.height as f32];
-        io.display_framebuffer_scale = [
-            state.surface.config.width as f32 / window_size.width as f32,
-            state.surface.config.height as f32 / window_size.height as f32,
-        ];
-    }
-
     let mut is_paused = state.is_paused;
     let mut reset_elapsed = false;
     let mut alive_threshold = state.simulation.alive_threshold();
@@ -83,6 +72,10 @@ pub(super) fn record_ui(
     let mut cell_color = [state.cell_color.x, state.cell_color.y, state.cell_color.z];
     let mut update_cell_color = false;
     let mut clear_board = false;
+    let mut born_rules = state.simulation.born_rules();
+    let mut survive_rules = state.simulation.survive_rules();
+    let mut update_born_rules = false;
+    let mut update_survive_rules = false;
     {
         let ui = state.ui_layer.imgui.frame();
         ui.window("Controls")
@@ -120,6 +113,40 @@ pub(super) fn record_ui(
                 if ui.color_edit3("Cell Color", &mut cell_color) {
                     update_cell_color = true;
                 }
+
+                ui.separator();
+                ui.text("Born Rules (B):");
+                ui.same_line();
+                for i in 0..9 {
+                    let mask = 1u16 << i;
+                    let mut checked = (born_rules & mask) != 0;
+                    if ui.checkbox(format!("{}##B{}", i, i), &mut checked) {
+                        if checked {
+                            born_rules |= mask;
+                        } else {
+                            born_rules &= !mask;
+                        }
+                        update_born_rules = true;
+                    }
+                    ui.same_line();
+                }
+
+                ui.new_line();
+                ui.text("Survive Rules (S):");
+                ui.same_line();
+                for i in 0..9 {
+                    let mask = 1u16 << i;
+                    let mut checked = (survive_rules & mask) != 0;
+                    if ui.checkbox(format!("{}##S{}", i, i), &mut checked) {
+                        if checked {
+                            survive_rules |= mask;
+                        } else {
+                            survive_rules &= !mask;
+                        }
+                        update_survive_rules = true;
+                    }
+                    ui.same_line();
+                }
             });
 
         state.ui_layer.platform.prepare_render(ui, &state.window);
@@ -133,6 +160,12 @@ pub(super) fn record_ui(
     }
     if update_cell_color {
         state.set_cell_color(cell_color);
+    }
+    if update_born_rules {
+        state.set_born_rules(born_rules);
+    }
+    if update_survive_rules {
+        state.set_survive_rules(survive_rules);
     }
     if clear_board {
         state.clear_board();
