@@ -13,6 +13,21 @@ use crate::{
     simulation::Simulation,
 };
 
+fn clamp_surface_size(width: u32, height: u32, max_dimension: u32) -> (u32, u32) {
+    if width == 0 || height == 0 {
+        return (width.max(1), height.max(1));
+    }
+
+    let scale = (max_dimension as f32 / width as f32)
+        .min(max_dimension as f32 / height as f32)
+        .min(1.0);
+
+    let clamped_width = ((width as f32 * scale).round() as u32).clamp(1, max_dimension);
+    let clamped_height = ((height as f32 * scale).round() as u32).clamp(1, max_dimension);
+
+    (clamped_width, clamped_height)
+}
+
 pub struct Surface {
     handle: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -77,6 +92,9 @@ impl State {
         let window_size = window.inner_size();
 
         let surface_capabilities = surface.get_capabilities(&adapter);
+        let max_surface_dimension = device.limits().max_texture_dimension_2d;
+        let (surface_width, surface_height) =
+            clamp_surface_size(window_size.width, window_size.height, max_surface_dimension);
         let surface_format = surface_capabilities
             .formats
             .iter()
@@ -86,15 +104,15 @@ impl State {
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: window_size.width,
-            height: window_size.height,
+            width: surface_width,
+            height: surface_height,
             present_mode: wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: 2,
             alpha_mode: surface_capabilities.alpha_modes[0],
             view_formats: vec![],
         };
 
-        let camera = Camera::new(30.0, window_size.width as f32 / window_size.height as f32);
+        let camera = Camera::new(30.0, surface_width as f32 / surface_height as f32);
         let mut camera_unif = camera::Uniform::new();
         camera_unif.update_view_proj(&camera);
         let camera_unif_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -158,14 +176,18 @@ impl State {
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             let surface = &mut self.surface;
-            surface.config.width = width;
-            surface.config.height = height;
+            let max_surface_dimension = self.device.limits().max_texture_dimension_2d;
+            let (surface_width, surface_height) =
+                clamp_surface_size(width, height, max_surface_dimension);
+
+            surface.config.width = surface_width;
+            surface.config.height = surface_height;
             surface.handle.configure(&self.device, &surface.config);
             surface.is_configured = true;
 
             self.cells.resize(&self.device, &surface.config);
             self.camera
-                .update_aspect_ratio(width as f32 / height as f32);
+                .update_aspect_ratio(surface_width as f32 / surface_height as f32);
 
             self.update();
         }
