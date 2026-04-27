@@ -6,8 +6,8 @@ struct CellState {
 @group(0) @binding(1) var<storage, read_write> output: array<CellState>;
 
 @group(1) @binding(0) var<uniform> grid_dims: vec2u;
+@group(1) @binding(1) var<uniform> simulation_params: vec4f;
 
-const alive_threshold = 0.3f;
 const neighbor_blend = 0.2f;
 
 const neighbor_deltas = array<vec2i, 8>(
@@ -42,7 +42,7 @@ fn pack_color(color: vec4f) -> u32 {
 }
 
 fn is_alive(color: vec3f) -> bool {
-    return max(color.r, max(color.g, color.b)) > alive_threshold;
+    return max(color.r, max(color.g, color.b)) > simulation_params.x;
 }
 
 struct NeighborState {

@@ -2,7 +2,12 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::Ok;
+#[cfg(not(target_arch = "wasm32"))]
+use imgui::{Condition, FontConfig, FontSource};
+#[cfg(not(target_arch = "wasm32"))]
+use imgui_wgpu::{Renderer as ImguiRenderer, RendererConfig};
+#[cfg(not(target_arch = "wasm32"))]
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use web_time::Instant;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
@@ -34,6 +39,18 @@ pub struct Surface {
     is_configured: bool,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub enum UiAction {
+    OpenImageDialog,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct UiLayer {
+    imgui: imgui::Context,
+    platform: WinitPlatform,
+    renderer: ImguiRenderer,
+}
+
 pub struct State {
     pub window: Arc<Window>,
 
@@ -53,6 +70,11 @@ pub struct State {
     previous_instant: Instant,
     elapsed: f32,
     is_paused: bool,
+
+    #[cfg(not(target_arch = "wasm32"))]
+    ui_layer: UiLayer,
+    #[cfg(not(target_arch = "wasm32"))]
+    pending_ui_action: Option<UiAction>,
 }
 
 impl State {
@@ -147,6 +169,35 @@ impl State {
         let simulation = Simulation::new(&device);
         let cells = Cells::new(&device, &surface_config, &camera_bgl);
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let ui_layer = {
+            let mut imgui = imgui::Context::create();
+            imgui.set_ini_filename(None);
+            imgui.fonts().add_font(&[FontSource::DefaultFontData {
+                config: Some(FontConfig {
+                    size_pixels: 14.0,
+                    pixel_snap_h: true,
+                    oversample_h: 1,
+                    ..FontConfig::default()
+                }),
+            }]);
+
+            let mut platform = WinitPlatform::new(&mut imgui);
+            platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
+
+            let renderer_config = RendererConfig {
+                texture_format: surface_format,
+                ..RendererConfig::default()
+            };
+            let renderer = ImguiRenderer::new(&mut imgui, &device, &queue, renderer_config);
+
+            UiLayer {
+                imgui,
+                platform,
+                renderer,
+            }
+        };
+
         Ok(Self {
             window,
 
@@ -170,6 +221,11 @@ impl State {
             previous_instant: Instant::now(),
             elapsed: 0.0,
             is_paused: false,
+
+            #[cfg(not(target_arch = "wasm32"))]
+            ui_layer,
+            #[cfg(not(target_arch = "wasm32"))]
+            pending_ui_action: None,
         })
     }
 
@@ -261,6 +317,11 @@ impl State {
             );
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.pending_ui_action = self.record_ui(&mut encoder, &surface_view, delta_time)?;
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
@@ -277,16 +338,25 @@ impl State {
         if code == KeyCode::Escape && is_pressed {
             event_loop.exit();
         } else if code == KeyCode::Space && is_pressed {
-            self.is_paused = !self.is_paused;
-            self.elapsed = 0.0;
+            self.toggle_pause();
         } else if self.camera_controller.handle_key(code, is_pressed) {
             self.update();
         }
     }
 
+    pub fn toggle_pause(&mut self) {
+        self.is_paused = !self.is_paused;
+        self.elapsed = 0.0;
+    }
+
+    pub fn set_alive_threshold(&mut self, alive_threshold: f32) {
+        self.simulation
+            .set_alive_threshold(&self.queue, alive_threshold);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn load_board_from_image_path(&mut self, path: &Path) -> anyhow::Result<()> {
-        let image = image::open(path)?;
+    pub fn load_board_from_image_bytes(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
+        let image = image::load_from_memory(bytes)?;
         let rgba_image = image.to_rgba8();
         let (image_width, image_height) = rgba_image.dimensions();
 
@@ -300,6 +370,31 @@ impl State {
         self.is_paused = true;
         self.elapsed = 0.0;
         Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn handle_window_event(&mut self, event: &winit::event::WindowEvent) {
+        let wrapped_event = winit::event::Event::<()>::WindowEvent {
+            window_id: self.window.id(),
+            event: event.clone(),
+        };
+
+        self.ui_layer.platform.handle_event(
+            self.ui_layer.imgui.io_mut(),
+            &self.window,
+            &wrapped_event,
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn take_ui_action(&mut self) -> Option<UiAction> {
+        self.pending_ui_action.take()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_board_from_image_path(&mut self, path: &Path) -> anyhow::Result<()> {
+        let bytes = std::fs::read(path)?;
+        self.load_board_from_image_bytes(&bytes)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -317,5 +412,95 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.camera_unif]),
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn record_ui(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        surface_view: &wgpu::TextureView,
+        delta_time: web_time::Duration,
+    ) -> anyhow::Result<Option<UiAction>> {
+        let mut requested_action = None;
+
+        self.ui_layer.imgui.io_mut().update_delta_time(delta_time);
+        self.ui_layer
+            .platform
+            .prepare_frame(self.ui_layer.imgui.io_mut(), &self.window)?;
+
+        // Keep ImGui clip/scissor conversion aligned with the actual swapchain size
+        // Surface may be clamped below the window size
+        let window_size = self.window.inner_size();
+        if window_size.width > 0 && window_size.height > 0 {
+            let io = self.ui_layer.imgui.io_mut();
+            io.display_size = [window_size.width as f32, window_size.height as f32];
+            io.display_framebuffer_scale = [
+                self.surface.config.width as f32 / window_size.width as f32,
+                self.surface.config.height as f32 / window_size.height as f32,
+            ];
+        }
+
+        let mut is_paused = self.is_paused;
+        let mut reset_elapsed = false;
+        let mut alive_threshold = self.simulation.alive_threshold();
+        let mut update_alive_threshold = false;
+        {
+            let ui = self.ui_layer.imgui.frame();
+            ui.window("Controls")
+                .position([12.0, 12.0], Condition::FirstUseEver)
+                .collapsed(true, Condition::FirstUseEver)
+                .movable(false)
+                .resizable(false)
+                .always_auto_resize(true)
+                .build(|| {
+                    let pause_label = if is_paused { "Resume" } else { "Pause" };
+                    if ui.button(pause_label) {
+                        is_paused = !is_paused;
+                        reset_elapsed = true;
+                    }
+
+                    if ui.button("Upload Image") {
+                        requested_action = Some(UiAction::OpenImageDialog);
+                    }
+
+                    if ui.slider("Alive Threshold", 0.0, 1.0, &mut alive_threshold) {
+                        update_alive_threshold = true;
+                    }
+                });
+
+            self.ui_layer.platform.prepare_render(ui, &self.window);
+        }
+
+        if reset_elapsed {
+            self.elapsed = 0.0;
+        }
+        if update_alive_threshold {
+            self.set_alive_threshold(alive_threshold);
+        }
+        self.is_paused = is_paused;
+
+        let draw_data = self.ui_layer.imgui.render();
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("imgui-render-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: surface_view,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+            multiview_mask: None,
+        });
+
+        self.ui_layer
+            .renderer
+            .render(draw_data, &self.queue, &self.device, &mut render_pass)?;
+
+        Ok(requested_action)
     }
 }

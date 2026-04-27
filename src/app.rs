@@ -3,6 +3,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::closure::Closure;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::EventLoopExtWebSys;
@@ -15,12 +19,25 @@ use winit::{
 };
 
 use crate::state::State;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::state::UiAction;
 
 pub enum UserEvent {
     #[cfg(target_arch = "wasm32")]
     StateReady(State),
+    #[cfg(target_arch = "wasm32")]
+    TogglePause,
+    #[cfg(target_arch = "wasm32")]
+    SetAliveThreshold(f32),
     #[cfg(not(target_arch = "wasm32"))]
     FileDialogResult(Option<PathBuf>),
+}
+
+#[cfg(target_arch = "wasm32")]
+struct WebControls {
+    _container: web_sys::Element,
+    _pause_click: Closure<dyn FnMut(web_sys::Event)>,
+    _alive_threshold_input: Closure<dyn FnMut(web_sys::Event)>,
 }
 
 pub struct App {
@@ -28,6 +45,8 @@ pub struct App {
     state: Option<State>,
     #[cfg(not(target_arch = "wasm32"))]
     is_file_dialog_open: bool,
+    #[cfg(target_arch = "wasm32")]
+    web_controls: Option<WebControls>,
 }
 
 impl App {
@@ -38,6 +57,8 @@ impl App {
             proxy,
             #[cfg(not(target_arch = "wasm32"))]
             is_file_dialog_open: false,
+            #[cfg(target_arch = "wasm32")]
+            web_controls: None,
         }
     }
 
@@ -59,6 +80,78 @@ impl App {
             let _ = proxy.send_event(UserEvent::FileDialogResult(selected));
         });
     }
+
+    #[cfg(target_arch = "wasm32")]
+    fn ensure_web_controls(&mut self) -> Result<(), wasm_bindgen::JsValue> {
+        if self.web_controls.is_some() {
+            return Ok(());
+        }
+
+        let window = wgpu::web_sys::window().unwrap_throw();
+        let document = window.document().unwrap_throw();
+        let body = document.body().unwrap_throw();
+
+        let container = document.create_element("div")?;
+        container.set_attribute(
+            "style",
+            "position:fixed;top:12px;left:12px;z-index:50;display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(24,24,24,0.68);backdrop-filter:blur(2px);",
+        )?;
+
+        let pause_button = document.create_element("button")?;
+        pause_button.set_text_content(Some("Pause/Resume"));
+        pause_button.set_attribute(
+            "style",
+            "border:0;border-radius:6px;padding:6px 10px;cursor:pointer;background:#f0f0f0;color:#1f1f1f;font:600 13px sans-serif;",
+        )?;
+
+        let alive_label = document.create_element("span")?;
+        alive_label.set_text_content(Some("Threshold"));
+        alive_label.set_attribute("style", "color:#f5f5f5;font:500 12px sans-serif;")?;
+
+        let alive_slider: web_sys::HtmlInputElement =
+            document.create_element("input")?.dyn_into()?;
+        alive_slider.set_type("range");
+        alive_slider.set_min("0.0");
+        alive_slider.set_max("1.0");
+        alive_slider.set_step("0.01");
+        alive_slider.set_value("0.30");
+        alive_slider.set_attribute("style", "width:140px;")?;
+
+        container.append_child(&pause_button)?;
+        container.append_child(&alive_label)?;
+        container.append_child(&alive_slider)?;
+        body.append_child(&container)?;
+
+        let pause_proxy = self.proxy.clone();
+        let pause_click = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            let _ = pause_proxy.send_event(UserEvent::TogglePause);
+        }) as Box<dyn FnMut(_)>);
+        pause_button
+            .add_event_listener_with_callback("click", pause_click.as_ref().unchecked_ref())?;
+
+        let threshold_proxy = self.proxy.clone();
+        let alive_slider_for_input = alive_slider.clone();
+        let alive_threshold_input = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            let parsed = alive_slider_for_input
+                .value()
+                .parse::<f32>()
+                .unwrap_or(0.30)
+                .clamp(0.0, 1.0);
+            let _ = threshold_proxy.send_event(UserEvent::SetAliveThreshold(parsed));
+        }) as Box<dyn FnMut(_)>);
+        alive_slider.add_event_listener_with_callback(
+            "input",
+            alive_threshold_input.as_ref().unchecked_ref(),
+        )?;
+
+        self.web_controls = Some(WebControls {
+            _container: container,
+            _pause_click: pause_click,
+            _alive_threshold_input: alive_threshold_input,
+        });
+
+        Ok(())
+    }
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -68,7 +161,6 @@ impl ApplicationHandler<UserEvent> for App {
 
         #[cfg(target_arch = "wasm32")]
         {
-            use wasm_bindgen::JsCast;
             use winit::platform::web::WindowAttributesExtWebSys;
 
             const CANVAS_ID: &str = "canvas";
@@ -91,6 +183,8 @@ impl ApplicationHandler<UserEvent> for App {
 
         #[cfg(target_arch = "wasm32")]
         {
+            self.ensure_web_controls().unwrap_throw();
+
             // Run the proxy asynchronously and use it to send the results to the event loop
             let proxy = self.proxy.clone();
             wasm_bindgen_futures::spawn_local(async move {
@@ -122,6 +216,18 @@ impl ApplicationHandler<UserEvent> for App {
 
                 self.state = Some(state);
             }
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::TogglePause => {
+                if let Some(state) = &mut self.state {
+                    state.toggle_pause();
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::SetAliveThreshold(alive_threshold) => {
+                if let Some(state) = &mut self.state {
+                    state.set_alive_threshold(alive_threshold);
+                }
+            }
             #[cfg(not(target_arch = "wasm32"))]
             UserEvent::FileDialogResult(path) => {
                 self.is_file_dialog_open = false;
@@ -144,6 +250,9 @@ impl ApplicationHandler<UserEvent> for App {
             None => return,
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        state.handle_window_event(&event);
+
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
@@ -152,7 +261,15 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::RedrawRequested => {
                 state.update();
                 match state.render() {
-                    Ok(_) => {}
+                    Ok(_) =>
+                    {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Some(action) = state.take_ui_action() {
+                            match action {
+                                UiAction::OpenImageDialog => self.open_file_dialog(),
+                            }
+                        }
+                    }
                     Err(err) => {
                         log::error!("error: {err}");
                         event_loop.exit();

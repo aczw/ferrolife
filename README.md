@@ -54,8 +54,19 @@ These controls are currently implemented in the app.
 | `Esc`                   | Exit application                         |
 | `U` (desktop only)      | Open file picker and load an image board |
 
+## UI Controls
+
+Desktop shows an ImGui controls panel in the top-left corner.
+Web builds show a minimal browser control bar in the top-left corner.
+
+| Button                   | Action                                                          |
+| ------------------------ | --------------------------------------------------------------- |
+| `Pause/Resume`           | Toggle simulation playback                                      |
+| `Upload Image`           | Open file picker and load image as initial board (desktop only) |
+| `Alive Threshold` slider | Set alive detection threshold (`0.0` to `1.0`, default `0.3`)   |
+
 ## Notes
 
 - Movement and zoom are continuous while keys are held.
 - On desktop, you can also drag and drop an image file into the window to load a board.
-- On web builds, the `U` file picker shortcut is not available.
+- On web builds, image upload is not supported yet.

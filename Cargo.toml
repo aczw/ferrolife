@@ -19,6 +19,9 @@ wgpu = "29.0.1"
 winit = "0.30.13"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+imgui = "0.12.0"
+imgui-wgpu = "0.28.0"
+imgui-winit-support = "0.13.0"
 rfd = "0.15.4"
 
 [lib]
@@ -29,7 +32,7 @@ console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 wasm-bindgen = "0.2.118"
 wasm-bindgen-futures = "0.4.68"
-web-sys = { version = "0.3.95", features = ["Document", "Window", "Element"] }
+web-sys = { version = "0.3.95", features = ["Document", "Window", "Element", "Event", "EventTarget", "HtmlElement", "HtmlInputElement"] }
 
 # See https://github.com/trunk-rs/trunk/issues/991#issuecomment-3139927457
 [package.metadata.wasm-pack.profile.profiling]
