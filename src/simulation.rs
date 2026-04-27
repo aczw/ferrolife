@@ -258,6 +258,7 @@ impl Simulation {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn set_state_from_rgba_image(
         &mut self,
         queue: &wgpu::Queue,
