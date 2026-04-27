@@ -65,6 +65,27 @@ impl Camera {
     pub fn update_aspect_ratio(&mut self, aspect_ratio: f32) {
         self.aspect_ratio = aspect_ratio;
     }
+
+    pub fn world_pos_from_screen(
+        &self,
+        screen_x: f32,
+        screen_y: f32,
+        viewport_width: f32,
+        viewport_height: f32,
+    ) -> Option<(f32, f32)> {
+        if viewport_width <= 0.0 || viewport_height <= 0.0 {
+            return None;
+        }
+
+        let ndc_x = (screen_x / viewport_width) * 2.0 - 1.0;
+        let ndc_y = 1.0 - (screen_y / viewport_height) * 2.0;
+
+        let half_width = self.top * self.aspect_ratio;
+        let world_x = self.target.x + ndc_x * half_width;
+        let world_y = self.target.y + ndc_y * self.top;
+
+        Some((world_x, world_y))
+    }
 }
 
 impl Uniform {

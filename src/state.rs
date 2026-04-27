@@ -2,6 +2,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use cgmath::Vector4;
 #[cfg(not(target_arch = "wasm32"))]
 use imgui::{Condition, FontConfig, FontSource};
 #[cfg(not(target_arch = "wasm32"))]
@@ -15,7 +16,7 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 use crate::{
     camera::{self, Camera},
     cells::Cells,
-    simulation::Simulation,
+    simulation::{GRID_HEIGHT, GRID_WIDTH, Simulation},
 };
 
 fn clamp_surface_size(width: u32, height: u32, max_dimension: u32) -> (u32, u32) {
@@ -70,6 +71,8 @@ pub struct State {
     previous_instant: Instant,
     elapsed: f32,
     is_paused: bool,
+    live_cell_color: Vector4<f32>,
+    cursor_pos: Option<(f32, f32)>,
 
     #[cfg(not(target_arch = "wasm32"))]
     ui_layer: UiLayer,
@@ -221,6 +224,8 @@ impl State {
             previous_instant: Instant::now(),
             elapsed: 0.0,
             is_paused: false,
+            live_cell_color: Vector4::new(1.0, 1.0, 1.0, 1.0),
+            cursor_pos: None,
 
             #[cfg(not(target_arch = "wasm32"))]
             ui_layer,
@@ -354,6 +359,57 @@ impl State {
             .set_alive_threshold(&self.queue, alive_threshold);
     }
 
+    pub fn set_live_cell_color(&mut self, color: [f32; 3]) {
+        self.live_cell_color = Vector4::new(
+            color[0].clamp(0.0, 1.0),
+            color[1].clamp(0.0, 1.0),
+            color[2].clamp(0.0, 1.0),
+            1.0,
+        );
+    }
+
+    pub fn clear_board(&mut self) {
+        self.simulation.clear_board(&self.queue);
+        self.elapsed = 0.0;
+    }
+
+    pub fn set_cursor_position(&mut self, x: f32, y: f32) {
+        self.cursor_pos = Some((x, y));
+    }
+
+    pub fn paint_cell_under_cursor(&mut self) {
+        let Some((screen_x, screen_y)) = self.cursor_pos else {
+            return;
+        };
+
+        let window_size = self.window.inner_size();
+        if let Some((world_x, world_y)) = self.camera.world_pos_from_screen(
+            screen_x,
+            screen_y,
+            window_size.width as f32,
+            window_size.height as f32,
+        ) {
+            let half_grid_width = (GRID_WIDTH as f32 - 1.0) * 0.5;
+            let half_grid_height = (GRID_HEIGHT as f32 - 1.0) * 0.5;
+
+            let grid_x = (world_x + half_grid_width + 0.5).floor() as i32;
+            let grid_y = (world_y + half_grid_height + 0.5).floor() as i32;
+
+            if grid_x >= 0
+                && grid_x < GRID_WIDTH as i32
+                && grid_y >= 0
+                && grid_y < GRID_HEIGHT as i32
+            {
+                self.simulation.set_cell_color(
+                    &self.queue,
+                    grid_x as u32,
+                    grid_y as u32,
+                    self.live_cell_color,
+                );
+            }
+        }
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load_board_from_image_bytes(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
         let image = image::load_from_memory(bytes)?;
@@ -384,6 +440,11 @@ impl State {
             &self.window,
             &wrapped_event,
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn should_capture_mouse(&self) -> bool {
+        self.ui_layer.imgui.io().want_capture_mouse
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -444,6 +505,13 @@ impl State {
         let mut reset_elapsed = false;
         let mut alive_threshold = self.simulation.alive_threshold();
         let mut update_alive_threshold = false;
+        let mut live_cell_color = [
+            self.live_cell_color.x,
+            self.live_cell_color.y,
+            self.live_cell_color.z,
+        ];
+        let mut update_live_cell_color = false;
+        let mut clear_board = false;
         {
             let ui = self.ui_layer.imgui.frame();
             ui.window("Controls")
@@ -463,8 +531,16 @@ impl State {
                         requested_action = Some(UiAction::OpenImageDialog);
                     }
 
+                    if ui.button("Clear Board") {
+                        clear_board = true;
+                    }
+
                     if ui.slider("Alive Threshold", 0.0, 1.0, &mut alive_threshold) {
                         update_alive_threshold = true;
+                    }
+
+                    if ui.color_edit3("Live Cell Color", &mut live_cell_color) {
+                        update_live_cell_color = true;
                     }
                 });
 
@@ -476,6 +552,12 @@ impl State {
         }
         if update_alive_threshold {
             self.set_alive_threshold(alive_threshold);
+        }
+        if update_live_cell_color {
+            self.set_live_cell_color(live_cell_color);
+        }
+        if clear_board {
+            self.clear_board();
         }
         self.is_paused = is_paused;
 

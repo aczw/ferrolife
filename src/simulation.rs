@@ -270,6 +270,34 @@ impl Simulation {
         }
     }
 
+    pub fn set_cell_color(&mut self, queue: &wgpu::Queue, x: u32, y: u32, color: Vector4<f32>) {
+        if x >= GRID_WIDTH || y >= GRID_HEIGHT {
+            return;
+        }
+
+        let index = (y * GRID_WIDTH + x) as wgpu::BufferAddress;
+        let offset = index * std::mem::size_of::<Instance>() as wgpu::BufferAddress;
+        let instance = [Instance {
+            color: pack_color(color),
+        }];
+        let bytes = bytemuck::cast_slice(&instance);
+
+        queue.write_buffer(&self.state_buf_a, offset, bytes);
+        queue.write_buffer(&self.state_buf_b, offset, bytes);
+    }
+
+    pub fn clear_board(&mut self, queue: &wgpu::Queue) {
+        let black = Instance {
+            color: pack_color(Vector4::new(0.0, 0.0, 0.0, 1.0)),
+        };
+        let clear_data = vec![black; self.num_instances()];
+        let bytes = bytemuck::cast_slice(&clear_data);
+
+        queue.write_buffer(&self.state_buf_a, 0, bytes);
+        queue.write_buffer(&self.state_buf_b, 0, bytes);
+        self.current_instance_buf = CurrentInstanceBuffer::A;
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     pub fn alive_threshold(&self) -> f32 {
         self.alive_threshold
